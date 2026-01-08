@@ -1,13 +1,11 @@
 local module = {}
 
 function module.Run(LogFunc, WaitFunc)
-    -- Các dịch vụ cần thiết
     local TweenService = game:GetService("TweenService")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local LocalPlayer = game:GetService("Players").LocalPlayer
     local StarterGui = game:GetService("StarterGui")
 
-    -- Hàm hỗ trợ (Được đem vào trong này)
     local function GetSpawnPosCFrame(spawnObj)
         if not spawnObj then return nil end
         if spawnObj:IsA("CFrameValue") then return spawnObj.Value
@@ -16,7 +14,7 @@ function module.Run(LogFunc, WaitFunc)
     end
 
     local function flyTo(targetCFrame)
-        WaitFunc() -- Dùng hàm Wait từ Main truyền vào
+        WaitFunc()
         local char = LocalPlayer.Character
         if not char or not char:FindFirstChild("HumanoidRootPart") then return end
         local root = char.HumanoidRootPart
@@ -26,7 +24,6 @@ function module.Run(LogFunc, WaitFunc)
         tween:Play(); tween.Completed:Wait(); bv:Destroy(); root.Velocity = Vector3.zero
     end
 
-    -- LOGIC CHÍNH
     local honeycombs = workspace:FindFirstChild("Honeycombs") or workspace:FindFirstChild("Hives")
     if not honeycombs then return false end
 
@@ -36,9 +33,8 @@ function module.Run(LogFunc, WaitFunc)
             local hiveID = hive.HiveID.Value
             local targetCF = GetSpawnPosCFrame(hive.SpawnPos)
             if targetCF then
-                
-                -- LOG 1: HÀNH ĐỘNG (Màu Vàng)
-                LogFunc("Action: Claiming Hive " .. hiveID, Color3.fromRGB(255, 220, 0))
+                -- LOG GỌN
+                LogFunc("Claiming Hive " .. hiveID .. "...", Color3.fromRGB(255, 220, 0))
                 
                 flyTo(targetCF)
                 WaitFunc()
@@ -46,21 +42,17 @@ function module.Run(LogFunc, WaitFunc)
                 
                 WaitFunc()
                 ReplicatedStorage.Events.ClaimHive:FireServer(hiveID)
-                
                 task.wait(1)
                 
-                -- LOG 2: KẾT QUẢ (Màu Xanh Lá)
-                LogFunc("Result: Success", Color3.fromRGB(0, 255, 0))
-                StarterGui:SetCore("SendNotification", {Title="Notification", Text="Claim hive success", Duration=5})
-                
-                return true -- Báo về Main là đã thành công
+                LogFunc("Hive Claimed", Color3.fromRGB(0, 255, 0))
+                StarterGui:SetCore("SendNotification", {Title="System", Text="Hive Claimed", Duration=3})
+                return true
             end
         end
     end
 
-    -- Log Thất bại (Màu Đỏ)
-    LogFunc("Result: No hive found", Color3.fromRGB(255, 80, 80))
-    return false -- Báo về Main là thất bại
+    LogFunc("No Empty Hive", Color3.fromRGB(255, 80, 80))
+    return false
 end
 
 return module
