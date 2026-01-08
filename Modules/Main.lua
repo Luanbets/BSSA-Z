@@ -1,5 +1,5 @@
 -- ====================================================
--- AUTO CLAIM HIVE V12 (MODULAR + UTILITIES INTEGRATION)
+-- AUTO CLAIM HIVE V12 (FULL SAVE SYSTEM + CHECKPOINT)
 -- ====================================================
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
@@ -64,47 +64,55 @@ end
 local function WaitIfPaused() while isPaused do task.wait(0.5) end end
 
 -- ====================================================
--- ĐIỀU PHỐI MODULE (LOGIC CHÍNH)
+-- ĐIỀU PHỐI MODULE
 -- ====================================================
 task.spawn(function()
     task.wait(1)
     Log("System: Initializing...", Color3.fromRGB(255, 255, 255))
 
-    -- 1. TẢI MODULE UTILITIES (QUAN TRỌNG: CHỨA TWEEN & SPEED)
+    -- 1. TẢI MODULE UTILITIES (QUAN TRỌNG: CHỨA SAVE & TWEEN)
     local utilsUrl = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/Utilities.lua"
     local successUtils, utilsFunc = pcall(function() return game:HttpGet(utilsUrl) end)
     local Utils = nil
+    local SaveData = {} 
 
     if successUtils then
         Utils = loadstring(utilsFunc)()
-        Log("System: Utilities Loaded (Speed: " .. Utils.Speed .. ")", Color3.fromRGB(200, 200, 200))
+        SaveData = Utils.LoadData() -- Đọc file save của nhân vật hiện tại
+        Log("System: Save Loaded (" .. LocalPlayer.Name .. ")", Color3.fromRGB(200, 200, 200))
     else
         Log("Error: Failed to load Utilities.lua", Color3.fromRGB(255, 0, 0))
-        return -- Dừng nếu không có Utils
+        return 
     end
 
-    -- 2. GỌI CLAIM HIVE (TRUYỀN UTILS VÀO)
+    -- 2. GỌI CLAIM HIVE (LUÔN CHẠY)
     local claimUrl = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/ClaimHive.lua"
     local success, claimFunc = pcall(function() return game:HttpGet(claimUrl) end)
     local isClaimed = false
 
     if success then
         local ClaimModule = loadstring(claimFunc)()
-        -- Truyền thêm Utils vào tham số thứ 3
         isClaimed = ClaimModule.Run(Log, WaitIfPaused, Utils)
     end
 
-    -- 3. CHẠY CÁC NHIỆM VỤ TIẾP THEO
-    if isClaimed then
-        -- A. REDEEM CODE
+    if not isClaimed then return end
+
+    -- 3. CHECK SAVE & CHẠY NHIỆM VỤ
+    
+    -- A. REDEEM CODE
+    if not SaveData.RedeemDone then
         local redeemUrl = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/RedeemCode.lua"
         local success2, redeemFunc = pcall(function() return game:HttpGet(redeemUrl) end)
         if success2 then
             local RedeemModule = loadstring(redeemFunc)()
-            RedeemModule.Run(Log, WaitIfPaused)
+            RedeemModule.Run(Log, WaitIfPaused, Utils)
         end
+    else
+        Log("Skip: Redeem Codes (Already Done)", Color3.fromRGB(100, 100, 100))
+    end
 
-        -- B. COTMOC1 (Cần Utils để bay mua trứng)
+    -- B. COTMOC1 (MUA TRỨNG)
+    if not SaveData.Cotmoc1Done then
         task.wait(1)
         local cotmoc1Url = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/Cotmoc1.lua"
         local success3, cm1Func = pcall(function() return game:HttpGet(cotmoc1Url) end)
@@ -112,7 +120,9 @@ task.spawn(function()
             local CM1Module = loadstring(cm1Func)()
             CM1Module.Run(Log, WaitIfPaused, Utils)
         end
-        
-        Log("System: All tasks completed!", Color3.fromRGB(0, 255, 0))
+    else
+        Log("Skip: Cotmoc1 (Already Done)", Color3.fromRGB(100, 100, 100))
     end
+    
+    Log("System: All pending tasks completed!", Color3.fromRGB(0, 255, 0))
 end)
