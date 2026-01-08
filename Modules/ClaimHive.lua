@@ -1,9 +1,8 @@
 local module = {}
 
-function module.Run(LogFunc, WaitFunc)
-    local TweenService = game:GetService("TweenService")
+-- Nhận Utils từ Main truyền vào
+function module.Run(LogFunc, WaitFunc, Utils)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local LocalPlayer = game:GetService("Players").LocalPlayer
     local StarterGui = game:GetService("StarterGui")
 
     local function GetSpawnPosCFrame(spawnObj)
@@ -11,17 +10,6 @@ function module.Run(LogFunc, WaitFunc)
         if spawnObj:IsA("CFrameValue") then return spawnObj.Value
         elseif spawnObj:IsA("BasePart") then return spawnObj.CFrame
         else return nil end
-    end
-
-    local function flyTo(targetCFrame)
-        WaitFunc()
-        local char = LocalPlayer.Character
-        if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-        local root = char.HumanoidRootPart
-        local finalPos = targetCFrame.Position + Vector3.new(0, 5, 0)
-        local tween = TweenService:Create(root, TweenInfo.new((finalPos - root.Position).Magnitude/100, Enum.EasingStyle.Linear), {CFrame = CFrame.new(finalPos)})
-        local bv = Instance.new("BodyVelocity", root); bv.Velocity = Vector3.zero; bv.MaxForce = Vector3.one * math.huge
-        tween:Play(); tween.Completed:Wait(); bv:Destroy(); root.Velocity = Vector3.zero
     end
 
     local honeycombs = workspace:FindFirstChild("Honeycombs") or workspace:FindFirstChild("Hives")
@@ -33,13 +21,13 @@ function module.Run(LogFunc, WaitFunc)
             local hiveID = hive.HiveID.Value
             local targetCF = GetSpawnPosCFrame(hive.SpawnPos)
             if targetCF then
-                -- LOG GỌN
+                -- Log Gọn
                 LogFunc("Claiming Hive " .. hiveID .. "...", Color3.fromRGB(255, 220, 0))
                 
-                flyTo(targetCF)
-                WaitFunc()
-                task.wait(1.5)
+                -- Dùng Utils để bay (Chỉnh tốc độ tập trung ở file Utils)
+                Utils.Tween(targetCF, WaitFunc)
                 
+                task.wait(1.5)
                 WaitFunc()
                 ReplicatedStorage.Events.ClaimHive:FireServer(hiveID)
                 task.wait(1)
