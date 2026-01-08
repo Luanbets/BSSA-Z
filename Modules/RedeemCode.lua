@@ -1,41 +1,26 @@
 local module = {}
 
--- Danh sách Code
 local promoCodes = {
-    "Wax",
-    "Nectar",
-    "Roof",
-    "Connoisseur",
-    "Crawlers",
-    "38217",
-    "Bopmaster",
-    "GumdropsForScience",
-    "ClubBean",
-    "BeesBuzz123"
+    "Wax", "Nectar", "Roof", "Connoisseur", "Crawlers", 
+    "38217", "Bopmaster", "GumdropsForScience", "ClubBean", "BeesBuzz123"
 }
 
--- Hàm chạy chính (Nhận hàm Log từ Main chuyển sang để in thông báo lên UI)
 function module.Run(LogFunc, WaitFunc)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local PromoEvent = ReplicatedStorage:WaitForChild("Events"):WaitForChild("PromoCodeEvent")
+    local PromoEvent = ReplicatedStorage.Events.PromoCodeEvent
 
-    if LogFunc then LogFunc("Action: Starting Redeem Code...", Color3.fromRGB(255, 220, 0)) end
+    task.wait(2)
+    LogFunc("Action: Redeeming codes...", Color3.fromRGB(255, 220, 0))
 
     for _, code in ipairs(promoCodes) do
-        if WaitFunc then WaitFunc() end -- Check pause
-        
-        -- Gửi code
+        WaitFunc()
         PromoEvent:FireServer(code)
-        
-        -- In log (nếu có hàm Log)
-        if LogFunc then 
-            LogFunc("Redeeming: " .. code, Color3.fromRGB(200, 200, 200)) 
-        end
-        
-        task.wait(1.2) -- Delay tránh bị kick
+        -- Log màu xám nhạt để báo đang chạy
+        LogFunc("Checking: " .. code, Color3.fromRGB(150, 150, 150))
+        task.wait(1.2)
     end
-
-    if LogFunc then LogFunc("Result: All codes checked!", Color3.fromRGB(0, 255, 0)) end
+    
+    LogFunc("Result: All codes redeemed", Color3.fromRGB(0, 255, 0))
 end
 
 return module
