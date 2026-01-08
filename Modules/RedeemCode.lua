@@ -7,23 +7,18 @@ local promoCodes = {
 
 function module.Run(LogFunc, WaitFunc)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local PromoEvent = ReplicatedStorage.Events.PromoCodeEvent
-
-    task.wait(2)
-    -- Chỉ thông báo 1 lần là đang bắt đầu nhập
-    LogFunc("Action: Redeeming codes...", Color3.fromRGB(255, 220, 0))
+    
+    task.wait(1)
+    LogFunc("Redeeming Codes...", Color3.fromRGB(255, 220, 0))
 
     for _, code in ipairs(promoCodes) do
         WaitFunc()
-        PromoEvent:FireServer(code)
-        
-        -- Đã xóa dòng Log("Checking: " .. code) ở đây cho đỡ rối
-        
-        task.wait(1.2) -- Vẫn giữ delay để không bị kick
+        ReplicatedStorage.Events.PromoCodeEvent:FireServer(code)
+        -- Không log chi tiết để tránh spam
+        task.wait(1.2)
     end
     
-    -- Thông báo 1 lần khi xong hết
-    LogFunc("Result: All codes checked", Color3.fromRGB(0, 255, 0))
+    LogFunc("Redeem Completed", Color3.fromRGB(0, 255, 0))
 end
 
 return module
