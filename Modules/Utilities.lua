@@ -1,47 +1,59 @@
 local module = {}
 
 -- ============================
--- CẤU HÌNH TỐC ĐỘ (CHỈNH Ở ĐÂY)
+-- CẤU HÌNH TỐC ĐỘ (ĐÃ SỬA: 100)
 -- ============================
-module.Speed = 120 -- Tốc độ bay (Càng lớn càng nhanh)
+module.Speed = 100 
 
--- ============================
--- HÀM TWEEN (DÙNG CHUNG)
--- ============================
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- === HÀM TẠO TÊN FILE RIÊNG THEO USERNAME ===
+local function GetSaveFileName()
+    return "BSSA_Save_" .. LocalPlayer.Name .. ".json"
+end
+
+-- === CHỨC NĂNG LƯU/ĐỌC GAME ===
+function module.LoadData()
+    local fileName = GetSaveFileName()
+    if isfile(fileName) then
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(readfile(fileName))
+        end)
+        if success then return result end
+    end
+    -- Dữ liệu mặc định
+    return {
+        RedeemDone = false,
+        Cotmoc1Done = false,
+        Cotmoc1_Progress = 0
+    }
+end
+
+function module.SaveData(key, value)
+    local fileName = GetSaveFileName()
+    local data = module.LoadData()
+    data[key] = value
+    writefile(fileName, HttpService:JSONEncode(data))
+end
+
+-- === HÀM TWEEN ===
 function module.Tween(targetCFrame, WaitFunc)
     local TweenService = game:GetService("TweenService")
-    local LocalPlayer = game:GetService("Players").LocalPlayer
-    
-    -- Kiểm tra nhân vật
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    
     local root = char.HumanoidRootPart
     
-    -- Nếu có hàm Wait (Tạm dừng), chạy nó trước
     if WaitFunc then WaitFunc() end
     
-    -- Tính toán vị trí bay (Cao hơn đích 5 unit)
     local finalPos = targetCFrame.Position + Vector3.new(0, 5, 0)
     local dist = (finalPos - root.Position).Magnitude
-    
-    -- Công thức thời gian: Quãng đường / Tốc độ
     local time = dist / module.Speed 
     
-    -- Tạo và chạy Tween
-    local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(finalPos)})
-    
-    local bv = Instance.new("BodyVelocity", root)
-    bv.Velocity = Vector3.zero
-    bv.MaxForce = Vector3.one * math.huge
-    
-    tween:Play()
-    tween.Completed:Wait()
-    
-    -- Dọn dẹp sau khi bay xong
-    bv:Destroy()
-    root.Velocity = Vector3.zero
+    local tween = TweenService:Create(root, TweenInfo.new(time, Enum.EasingStyle.Linear), {CFrame = CFrame.new(finalPos)})
+    local bv = Instance.new("BodyVelocity", root); bv.Velocity = Vector3.zero; bv.MaxForce = Vector3.one * math.huge
+    tween:Play(); tween.Completed:Wait(); bv:Destroy(); root.Velocity = Vector3.zero
 end
 
 return module
