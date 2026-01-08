@@ -1,5 +1,5 @@
 -- ====================================================
--- AUTO CLAIM HIVE V12 (MODULAR VERSION)
+-- AUTO CLAIM HIVE V12 (MODULAR VERSION + COTMOC1)
 -- ====================================================
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
@@ -12,7 +12,7 @@ local isPaused = false
 local logHistory = {} 
 
 -- ====================================================
--- PHẦN 1: GIAO DIỆN (UI) - GIỮ NGUYÊN CỦA BẠN
+-- PHẦN 1: GIAO DIỆN (UI) - GIỮ NGUYÊN
 -- ====================================================
 if CoreGui:FindFirstChild("AutoHiveV12") then CoreGui.AutoHiveV12:Destroy() end
 local screenGui = Instance.new("ScreenGui")
@@ -46,7 +46,7 @@ openBtn.MouseButton1Click:Connect(function() mainFrame.Visible = true; openBtn.V
 pauseBtn.MouseButton1Click:Connect(function() isPaused = not isPaused; pauseBtn.Text = isPaused and "[ RESUME ]" or "[ PAUSE ]"; pauseBtn.TextColor3 = isPaused and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 80, 80) end)
 
 -- ====================================================
--- HÀM LOG & HỖ TRỢ (GIỮ NGUYÊN ĐỂ TRUYỀN VÀO MODULE)
+-- HÀM LOG & HỖ TRỢ (GIỮ NGUYÊN)
 -- ====================================================
 local function Log(text, color)
     local currentTime = os.date("%H:%M:%S")
@@ -67,7 +67,7 @@ end
 local function WaitIfPaused() while isPaused do task.wait(0.5) end end
 
 -- ====================================================
--- ĐIỀU PHỐI MODULE (PHẦN QUAN TRỌNG NHẤT)
+-- ĐIỀU PHỐI MODULE (ĐÃ THÊM COTMOC1)
 -- ====================================================
 task.spawn(function()
     task.wait(1)
@@ -87,8 +87,9 @@ task.spawn(function()
         Log("Error: Failed to load ClaimHive.lua", Color3.fromRGB(255, 0, 0))
     end
 
-    -- 2. GỌI MODULE REDEEM CODE (NẾU CLAIM THÀNH CÔNG)
+    -- 2. GỌI MODULE REDEEM CODE + COTMOC1 (NẾU CLAIM THÀNH CÔNG)
     if isClaimed then
+        -- A. REDEEM CODE
         local redeemUrl = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/RedeemCode.lua"
         local success2, redeemFunc = pcall(function() return game:HttpGet(redeemUrl) end)
         
@@ -98,9 +99,26 @@ task.spawn(function()
         else
             Log("Error: Failed to load RedeemCode.lua", Color3.fromRGB(255, 0, 0))
         end
+
+        -- B. COTMOC1 (MUA TRỨNG) - MỚI THÊM VÀO ĐÂY
+        task.wait(1)
+        Log("System: Starting Cotmoc1...", Color3.fromRGB(255, 255, 255))
+        
+        local cotmoc1Url = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/Cotmoc1.lua"
+        local success3, cm1Func = pcall(function() return game:HttpGet(cotmoc1Url) end)
+        
+        if success3 then
+            local CM1Module = loadstring(cm1Func)()
+            CM1Module.Run(Log, WaitIfPaused)
+        else
+             Log("Error: Failed to load Cotmoc1.lua", Color3.fromRGB(255, 0, 0))
+        end
+        
+        Log("System: All tasks completed!", Color3.fromRGB(0, 255, 0))
+
     else
         if success then -- Nếu load được module nhưng trả về false (không tìm thấy tổ)
-             -- Log đã được in bên trong module rồi, không cần in thêm
+             -- Log đã được in bên trong module rồi
         end
     end
 end)
