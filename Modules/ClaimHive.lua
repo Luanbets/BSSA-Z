@@ -1,6 +1,5 @@
 local module = {}
 
--- Nhận Utils từ Main truyền vào
 function module.Run(LogFunc, WaitFunc, Utils)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local StarterGui = game:GetService("StarterGui")
@@ -21,10 +20,8 @@ function module.Run(LogFunc, WaitFunc, Utils)
             local hiveID = hive.HiveID.Value
             local targetCF = GetSpawnPosCFrame(hive.SpawnPos)
             if targetCF then
-                -- Log Gọn
                 LogFunc("Claiming Hive " .. hiveID .. "...", Color3.fromRGB(255, 220, 0))
                 
-                -- Dùng Utils để bay (Chỉnh tốc độ tập trung ở file Utils)
                 Utils.Tween(targetCF, WaitFunc)
                 
                 task.wait(1.5)
