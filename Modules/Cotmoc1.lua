@@ -59,7 +59,7 @@ function module.Run(LogFunc, WaitFunc)
             LogFunc("Error: Mua that bai lan " .. i, Color3.fromRGB(255, 80, 80))
         end
         
-        task.wait(3.5) -- Đợi trứng nở animation xong mới mua tiếp
+        task.wait(1) -- Đợi trứng nở animation xong mới mua tiếp
     end
 
     LogFunc("Cotmoc1: Hoan thanh mua trung!", Color3.fromRGB(0, 255, 0))
