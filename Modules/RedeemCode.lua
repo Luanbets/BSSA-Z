@@ -5,7 +5,7 @@ local promoCodes = {
     "38217", "Bopmaster", "GumdropsForScience", "ClubBean", "BeesBuzz123"
 }
 
-function module.Run(LogFunc, WaitFunc)
+function module.Run(LogFunc, WaitFunc, Utils)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     
     task.wait(1)
@@ -14,11 +14,11 @@ function module.Run(LogFunc, WaitFunc)
     for _, code in ipairs(promoCodes) do
         WaitFunc()
         ReplicatedStorage.Events.PromoCodeEvent:FireServer(code)
-        -- Không log chi tiết để tránh spam
         task.wait(1.2)
     end
     
     LogFunc("Redeem Completed", Color3.fromRGB(0, 255, 0))
+    if Utils then Utils.SaveData("RedeemDone", true) end
 end
 
 return module
