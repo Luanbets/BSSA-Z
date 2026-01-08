@@ -10,17 +10,20 @@ function module.Run(LogFunc, WaitFunc)
     local PromoEvent = ReplicatedStorage.Events.PromoCodeEvent
 
     task.wait(2)
+    -- Chỉ thông báo 1 lần là đang bắt đầu nhập
     LogFunc("Action: Redeeming codes...", Color3.fromRGB(255, 220, 0))
 
     for _, code in ipairs(promoCodes) do
         WaitFunc()
         PromoEvent:FireServer(code)
-        -- Log màu xám nhạt để báo đang chạy
-        LogFunc("Checking: " .. code, Color3.fromRGB(150, 150, 150))
-        task.wait(1.2)
+        
+        -- Đã xóa dòng Log("Checking: " .. code) ở đây cho đỡ rối
+        
+        task.wait(1.2) -- Vẫn giữ delay để không bị kick
     end
     
-    LogFunc("Result: All codes redeemed", Color3.fromRGB(0, 255, 0))
+    -- Thông báo 1 lần khi xong hết
+    LogFunc("Result: All codes checked", Color3.fromRGB(0, 255, 0))
 end
 
 return module
