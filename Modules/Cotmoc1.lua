@@ -3,8 +3,7 @@ local module = {}
 function module.Run(LogFunc, WaitFunc, Utils)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     
-    -- 1. LOAD MODULE SHOP UTILS (Để check tiền và item)
-    -- Bạn nhớ lưu file ShopUtils.lua lên github hoặc cùng thư mục nhé
+    -- 1. LOAD MODULE SHOP UTILS
     local shopUtilsUrl = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/ShopUtils.lua" 
     local success, func = pcall(function() return game:HttpGet(shopUtilsUrl) end)
     local ShopUtils = nil
@@ -24,9 +23,10 @@ function module.Run(LogFunc, WaitFunc, Utils)
     local daMua = currentData.Cotmoc1_Progress or 0 
     local totalSteps = 4 
 
-    if daMua >= totalSteps then
+    -- Check ngay từ đầu
+    if daMua >= totalSteps or currentData.Cotmoc1Done then
         LogFunc("Cotmoc1: Already completed!", Color3.fromRGB(0, 255, 0))
-        Utils.SaveData("Cotmoc1Done", true)
+        if not currentData.Cotmoc1Done then Utils.SaveData("Cotmoc1Done", true) end
         return
     end
 
@@ -40,22 +40,23 @@ function module.Run(LogFunc, WaitFunc, Utils)
         
         for i = (daMua + 1), 2 do
             WaitFunc()
-            -- Trứng Basic giá rẻ và thay đổi theo số lượng nên ta mua luôn không cần check kỹ
             pcall(function()
                 game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Basic", ["Amount"]=1, ["Category"]="Eggs"})
             end)
             
+            -- Giả định mua thành công để không bị kẹt (vì trứng rẻ)
             Utils.SaveData("Cotmoc1_Progress", i) 
+            daMua = i -- Cập nhật biến cục bộ
             LogFunc("Bought Egg " .. i .. "/2", Color3.fromRGB(200, 200, 200))
             task.wait(1)
         end
-        daMua = 2 
     end
 
     -- ==========================================
     -- GIAI ĐOẠN 2: MUA DỤNG CỤ (Bước 3 -> 4)
     -- ==========================================
     if daMua < 4 then
+        -- Chỉ di chuyển nếu chưa mua xong
         LogFunc("Moving to Tool Shop...", Color3.fromRGB(255, 220, 0))
         Utils.Tween(ToolShopPos, WaitFunc)
         task.wait(1)
@@ -64,60 +65,66 @@ function module.Run(LogFunc, WaitFunc, Utils)
         if daMua < 3 then
             WaitFunc()
             local canBuy = true
-            
-            -- Nếu có ShopUtils thì check, không thì thôi (tránh lỗi script)
-            if ShopUtils then 
-                canBuy = ShopUtils.CheckBuy("Backpack", LogFunc)
-            end
+            if ShopUtils then canBuy = ShopUtils.CheckBuy("Backpack", LogFunc) end
 
             if canBuy then
                 LogFunc("Buying Backpack...", Color3.fromRGB(255, 255, 255))
-                local success, err = pcall(function()
+                local successBuy, err = pcall(function()
                     game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Backpack", ["Category"]="Accessory"})
                 end)
                 
-                if success then
+                if successBuy then
                     Utils.SaveData("Cotmoc1_Progress", 3)
-                    LogFunc("Bought Backpack", Color3.fromRGB(0, 255, 0))
                     daMua = 3
+                    LogFunc("✅ Bought Backpack", Color3.fromRGB(0, 255, 0))
+                else
+                    LogFunc("❌ Buy Failed (Server Error)", Color3.fromRGB(255, 0, 0))
                 end
             else
-                LogFunc("Skip Backpack: Not enough resources", Color3.fromRGB(255, 80, 80))
-                return -- Dừng lại đi farm tiếp
+                LogFunc("⏸️ Skip Backpack (Not enough Honey)", Color3.fromRGB(255, 150, 0))
+                -- KHÔNG RETURN Ở ĐÂY để nó còn chạy xuống logic lưu bên dưới
             end
             task.wait(1)
         end
 
         -- BƯỚC 4: MUA RAKE
-        if daMua < 4 then
+        -- Chỉ chạy mua Rake nếu đã mua xong Backpack (daMua == 3)
+        if daMua == 3 then
             WaitFunc()
             local canBuy = true
-            
-            if ShopUtils then 
-                canBuy = ShopUtils.CheckBuy("Rake", LogFunc) -- Rake dùng data mặc định hoặc bạn thêm vào Tooldata nếu cần
-            end
-            
-            -- Lưu ý: Trong file Tooldata bạn gửi ko có Rake thường, chỉ có Golden Rake.
-            -- Nếu Rake thường giá rẻ (800 Honey) thì có thể bỏ qua check hoặc thêm data Rake vào ShopUtils.
-            -- Ở đây tôi giả định là check được hoặc mua luôn.
+            if ShopUtils then canBuy = ShopUtils.CheckBuy("Rake", LogFunc) end
 
             if canBuy then
                 LogFunc("Buying Rake...", Color3.fromRGB(255, 255, 255))
-                local success, err = pcall(function()
+                local successBuy, err = pcall(function()
                     game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Rake", ["Category"]="Collector"})
                 end)
                 
-                if success then
+                if successBuy then
                     Utils.SaveData("Cotmoc1_Progress", 4)
-                    LogFunc("Bought Rake", Color3.fromRGB(0, 255, 0))
+                    daMua = 4
+                    LogFunc("✅ Bought Rake", Color3.fromRGB(0, 255, 0))
+                else
+                    LogFunc("❌ Buy Failed (Server Error)", Color3.fromRGB(255, 0, 0))
                 end
+            else
+                LogFunc("⏸️ Skip Rake (Not enough Honey)", Color3.fromRGB(255, 150, 0))
             end
             task.wait(1)
         end
     end
 
-    LogFunc("Cotmoc1 Completed", Color3.fromRGB(0, 255, 0))
-    Utils.SaveData("Cotmoc1Done", true)
+    -- ==========================================
+    -- KIỂM TRA LẦN CUỐI
+    -- ==========================================
+    -- QUAN TRỌNG: Chỉ đánh dấu hoàn thành khi thực sự đã mua đủ 4 món
+    if daMua >= 4 then
+        LogFunc("🎉 Cotmoc1 Completed Full!", Color3.fromRGB(0, 255, 0))
+        Utils.SaveData("Cotmoc1Done", true)
+    else
+        LogFunc("⏳ Cotmoc1 Paused (Step " .. daMua .. "/4). Need farming.", Color3.fromRGB(255, 200, 100))
+        -- Không lưu Cotmoc1Done = true, để lần sau nó chạy lại
+    end
 end
 
 return module
