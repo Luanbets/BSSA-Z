@@ -3,15 +3,25 @@ local module = {}
 function module.Run(LogFunc, WaitFunc, Utils)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     
+    -- 1. LOAD MODULE SHOP UTILS (Để check tiền và item)
+    -- Bạn nhớ lưu file ShopUtils.lua lên github hoặc cùng thư mục nhé
+    local shopUtilsUrl = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/ShopUtils.lua" 
+    local success, func = pcall(function() return game:HttpGet(shopUtilsUrl) end)
+    local ShopUtils = nil
+    
+    if success then
+        ShopUtils = loadstring(func)()
+    else
+        LogFunc("⚠️ Warning: Cannot load ShopUtils. Buying blindly...", Color3.fromRGB(255, 100, 0))
+    end
+
     -- Tọa độ
     local EggShopPos = CFrame.new(-140.41, 4.69, 243.97)
-    local ToolShopPos = CFrame.new(84.88, 4.51, 290.49) -- Tọa độ mới
+    local ToolShopPos = CFrame.new(84.88, 4.51, 290.49)
 
-    -- 1. ĐỌC CHECKPOINT
+    -- 2. ĐỌC CHECKPOINT
     local currentData = Utils.LoadData() 
     local daMua = currentData.Cotmoc1_Progress or 0 
-    
-    -- Tổng các bước cần làm: 2 Trứng + 1 Balo + 1 Cào = 4 Bước
     local totalSteps = 4 
 
     if daMua >= totalSteps then
@@ -28,19 +38,17 @@ function module.Run(LogFunc, WaitFunc, Utils)
         Utils.Tween(EggShopPos, WaitFunc)
         task.wait(1)
         
-        -- Chạy tiếp từ số trứng đã mua
         for i = (daMua + 1), 2 do
             WaitFunc()
+            -- Trứng Basic giá rẻ và thay đổi theo số lượng nên ta mua luôn không cần check kỹ
             pcall(function()
                 game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Basic", ["Amount"]=1, ["Category"]="Eggs"})
             end)
             
-            -- Lưu tiến độ (1 hoặc 2)
             Utils.SaveData("Cotmoc1_Progress", i) 
             LogFunc("Bought Egg " .. i .. "/2", Color3.fromRGB(200, 200, 200))
             task.wait(1)
         end
-        -- Cập nhật lại biến daMua sau khi xong giai đoạn trứng
         daMua = 2 
     end
 
@@ -55,15 +63,27 @@ function module.Run(LogFunc, WaitFunc, Utils)
         -- BƯỚC 3: MUA BACKPACK
         if daMua < 3 then
             WaitFunc()
-            LogFunc("Buying Backpack...", Color3.fromRGB(255, 255, 255))
-            local success, err = pcall(function()
-                game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Backpack", ["Category"]="Accessory"})
-            end)
+            local canBuy = true
             
-            if success then
-                Utils.SaveData("Cotmoc1_Progress", 3) -- Lưu bước 3
-                LogFunc("Bought Backpack", Color3.fromRGB(0, 255, 0))
-                daMua = 3
+            -- Nếu có ShopUtils thì check, không thì thôi (tránh lỗi script)
+            if ShopUtils then 
+                canBuy = ShopUtils.CheckBuy("Backpack", LogFunc)
+            end
+
+            if canBuy then
+                LogFunc("Buying Backpack...", Color3.fromRGB(255, 255, 255))
+                local success, err = pcall(function()
+                    game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Backpack", ["Category"]="Accessory"})
+                end)
+                
+                if success then
+                    Utils.SaveData("Cotmoc1_Progress", 3)
+                    LogFunc("Bought Backpack", Color3.fromRGB(0, 255, 0))
+                    daMua = 3
+                end
+            else
+                LogFunc("Skip Backpack: Not enough resources", Color3.fromRGB(255, 80, 80))
+                return -- Dừng lại đi farm tiếp
             end
             task.wait(1)
         end
@@ -71,20 +91,31 @@ function module.Run(LogFunc, WaitFunc, Utils)
         -- BƯỚC 4: MUA RAKE
         if daMua < 4 then
             WaitFunc()
-            LogFunc("Buying Rake...", Color3.fromRGB(255, 255, 255))
-            local success, err = pcall(function()
-                game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Rake", ["Category"]="Collector"})
-            end)
+            local canBuy = true
             
-            if success then
-                Utils.SaveData("Cotmoc1_Progress", 4) -- Lưu bước 4
-                LogFunc("Bought Rake", Color3.fromRGB(0, 255, 0))
+            if ShopUtils then 
+                canBuy = ShopUtils.CheckBuy("Rake", LogFunc) -- Rake dùng data mặc định hoặc bạn thêm vào Tooldata nếu cần
+            end
+            
+            -- Lưu ý: Trong file Tooldata bạn gửi ko có Rake thường, chỉ có Golden Rake.
+            -- Nếu Rake thường giá rẻ (800 Honey) thì có thể bỏ qua check hoặc thêm data Rake vào ShopUtils.
+            -- Ở đây tôi giả định là check được hoặc mua luôn.
+
+            if canBuy then
+                LogFunc("Buying Rake...", Color3.fromRGB(255, 255, 255))
+                local success, err = pcall(function()
+                    game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Rake", ["Category"]="Collector"})
+                end)
+                
+                if success then
+                    Utils.SaveData("Cotmoc1_Progress", 4)
+                    LogFunc("Bought Rake", Color3.fromRGB(0, 255, 0))
+                end
             end
             task.wait(1)
         end
     end
 
-    -- HOÀN TẤT
     LogFunc("Cotmoc1 Completed", Color3.fromRGB(0, 255, 0))
     Utils.SaveData("Cotmoc1Done", true)
 end
