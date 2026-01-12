@@ -10,7 +10,7 @@ local FieldDataDB = nil
 local TokenPriorityDB = nil
 
 -- =========================================================
--- 1. HÀM TẢI DỮ LIỆU (GIỮ NGUYÊN)
+-- 1. HÀM TẢI DỮ LIỆU
 -- =========================================================
 local function LoadExternalModules(LogFunc)
     -- !!! LINK GITHUB CỦA BẠN !!!
@@ -33,8 +33,31 @@ local function LoadExternalModules(LogFunc)
 end
 
 -- =========================================================
--- 2. HÀM HỖ TRỢ
+-- 2. HÀM HỖ TRỢ & TÌM TỔ (FIXED)
 -- =========================================================
+
+-- Hàm Tìm Tổ Ong Của Mình (Siêu Cấp)
+local function GetMyHivePos()
+    -- Tìm folder chứa Hive (Có server tên Honeycombs, có server tên Hives)
+    local honeycombs = Workspace:FindFirstChild("Honeycombs") or Workspace:FindFirstChild("Hives")
+    if not honeycombs then return nil end
+    
+    for _, hive in pairs(honeycombs:GetChildren()) do
+        -- Kiểm tra xem Hive có chủ chưa
+        if hive:FindFirstChild("Owner") and hive:FindFirstChild("SpawnPos") then
+            -- So sánh 1: Giá trị Owner là Tên (String)
+            if tostring(hive.Owner.Value) == LocalPlayer.Name then
+                return hive.SpawnPos.CFrame
+            end
+            -- So sánh 2: Giá trị Owner là Object (Instance)
+            if hive.Owner.Value == LocalPlayer then
+                return hive.SpawnPos.CFrame
+            end
+        end
+    end
+    return nil
+end
+
 local function GetIDFromTexture(texture)
     return tostring(string.match(texture, "%d+$"))
 end
@@ -55,7 +78,7 @@ local function IsPointInField(point, fieldInfo)
     return (dx <= halfX and dz <= halfZ)
 end
 
--- Hàm tìm Token tốt nhất (Tối ưu hóa tốc độ)
+-- Tìm Token (Logic V2 - Ổn định)
 local function FindBestToken(fieldInfo)
     if not TokenPriorityDB then return nil end
     local Character = LocalPlayer.Character
@@ -69,7 +92,6 @@ local function FindBestToken(fieldInfo)
     local collectibles = Workspace:FindFirstChild("Collectibles")
     if collectibles then
         for _, token in pairs(collectibles:GetChildren()) do
-            -- Chỉ lấy token chưa bị nhặt (Transparency = 0)
             if token.Transparency == 0 and token:FindFirstChild("FrontDecal") then
                 local texID = "rbxassetid://" .. GetIDFromTexture(token.FrontDecal.Texture)
                 local tokenData = TokenPriorityDB[texID]
@@ -116,16 +138,11 @@ function module.StartFarm(fieldName, LogFunc, Utils)
     isFarming = true
     if LogFunc then LogFunc("🚜 Bắt đầu Farm: " .. fieldName, Color3.fromRGB(0, 255, 0)) end
 
-    -- =========================================================
-    -- FIX 1: DÙNG REMOTE EVENT THẬT ĐỂ ĐÀO (KHÔNG DÙNG TOOL:ACTIVATE)
-    -- =========================================================
+    -- Auto Dig (Remote)
     task.spawn(function()
         while isFarming do
-            pcall(function()
-                -- Đây là Remote Event chính xác để thu phấn trong BSS
-                ReplicatedStorage.Events.ToolCollect:FireServer()
-            end)
-            task.wait(0.2) -- Tốc độ đào (đừng chỉnh thấp quá kẻo bị kick)
+            pcall(function() ReplicatedStorage.Events.ToolCollect:FireServer() end)
+            task.wait(0.2)
         end
     end)
 
@@ -133,14 +150,11 @@ function module.StartFarm(fieldName, LogFunc, Utils)
     local Humanoid = Character:WaitForChild("Humanoid")
     local RootPart = Character:WaitForChild("HumanoidRootPart")
 
-    -- Đến Field
     Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
 
     while isFarming do
-        -- Dùng RunService để mượt hơn, không dùng task.wait() ở vòng lặp chính
         RunService.Heartbeat:Wait()
         
-        -- Cập nhật nhân vật
         if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             LocalPlayer.CharacterAdded:Wait()
             Character = LocalPlayer.Character
@@ -149,66 +163,60 @@ function module.StartFarm(fieldName, LogFunc, Utils)
             Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
         end
 
-        -- 1. Convert
+        -- 1. XỬ LÝ ĐẦY BALO (LOGIC MỚI)
         if IsBackpackFull() then
-            if LogFunc then LogFunc("🎒 Đầy Balo -> Về tổ...", Color3.fromRGB(255, 200, 0)) end
+            if LogFunc then LogFunc("🎒 Balo đầy! Đang tìm tổ...", Color3.fromRGB(255, 200, 0)) end
             
-            local hives = Workspace:FindFirstChild("Honeycombs") or Workspace:FindFirstChild("Hives")
-            local myHivePos = nil
-            for _, hive in pairs(hives:GetChildren()) do
-                if hive:FindFirstChild("Owner") and hive.Owner.Value == LocalPlayer then
-                    if hive:FindFirstChild("SpawnPos") then
-                        myHivePos = hive.SpawnPos.CFrame
-                    end
-                    break
-                end
-            end
+            local myHivePos = GetMyHivePos() -- Gọi hàm tìm tổ mới
 
             if myHivePos then
-                Utils.Tween(myHivePos * CFrame.new(0, 0, 3), function() end)
+                -- Về tổ (Cộng thêm độ cao và lùi ra xíu để dễ đứng)
+                Utils.Tween(myHivePos * CFrame.new(0, 2, 6), function() end)
+                
+                -- Thực hiện Convert
+                local convertTimeout = 0
                 repeat
                     ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
                     task.wait(2)
+                    convertTimeout = convertTimeout + 1
+                    
+                    -- Nếu kẹt quá 60s mà không xong thì quay lại farm (tránh treo)
+                    if convertTimeout > 30 then break end 
                 until not IsBackpackFull() or not isFarming
                 
-                if LogFunc then LogFunc("✅ Convert xong -> Quay lại...", Color3.fromRGB(0, 255, 0)) end
+                if LogFunc then LogFunc("✅ Xong! Quay lại farm...", Color3.fromRGB(0, 255, 0)) end
                 Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
+            else
+                if LogFunc then LogFunc("⚠️ Lỗi: Không tìm thấy tổ của bạn!", Color3.fromRGB(255, 0, 0)) end
+                -- Nếu không tìm thấy tổ, reset nhân vật để về bệ spawn (giải pháp cuối cùng)
+                -- LocalPlayer.Character:BreakJoints() 
+                task.wait(5)
             end
         end
 
-        -- 2. Nhặt Token (FIX DI CHUYỂN)
+        -- 2. Nhặt Token
         local targetToken = FindBestToken(fieldInfo)
         
         if targetToken then
-            -- Liên tục di chuyển tới token
             Humanoid:MoveTo(targetToken.Position)
-            
             local stuckCount = 0
-            -- Vòng lặp chờ nhặt: Chỉ thoát khi token BIẾN MẤT (đã nhặt được) hoặc timeout
             while targetToken and targetToken.Parent and targetToken.Transparency == 0 do
-                -- Vẫn cứ MoveTo để đảm bảo nhân vật không dừng lại giữa chừng
                 Humanoid:MoveTo(targetToken.Position)
-                
-                -- Check nếu đi ra ngoài Field thì break
                 if not IsPointInField(RootPart.Position, fieldInfo) then break end
-                
                 stuckCount = stuckCount + 1
-                if stuckCount > 60 then break end -- Timeout khoảng 2 giây nếu kẹt
+                if stuckCount > 60 then break end
                 RunService.Heartbeat:Wait()
             end
         else
-            -- 3. Farm ngẫu nhiên (Đi liên tục không dừng)
+            -- 3. Farm ngẫu nhiên
             local rx = math.random(-fieldInfo.Size.X/2 + 5, fieldInfo.Size.X/2 - 5)
             local rz = math.random(-fieldInfo.Size.Z/2 + 5, fieldInfo.Size.Z/2 - 5)
             local dest = Vector3.new(fieldInfo.Pos.X + rx, fieldInfo.Pos.Y, fieldInfo.Pos.Z + rz)
             
             Humanoid:MoveTo(dest)
             local walkTime = 0
-            
             while (RootPart.Position - dest).Magnitude > 4 and walkTime < 30 do
-                -- Nếu thấy token ngon xuất hiện -> Bỏ đi bộ, chạy qua nhặt ngay
                 if FindBestToken(fieldInfo) then break end
-                
                 walkTime = walkTime + 1
                 RunService.Heartbeat:Wait()
             end
