@@ -144,3 +144,4 @@ if fieldName and fieldInfo then
 else
     print("Bạn chưa đủ ong để farm vật phẩm này hoặc tên sai!")
 end
+return FieldData
