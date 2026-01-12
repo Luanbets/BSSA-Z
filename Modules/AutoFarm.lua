@@ -1,7 +1,6 @@
 local module = {}
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
 -- Biến lưu dữ liệu
@@ -13,16 +12,12 @@ local function LoadExternalModules(LogFunc)
     -- !!! LINK GITHUB CỦA BẠN !!!
     local repo = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/"
     
-    -- 1. Load FieldData
     local success1, content1 = pcall(function() return game:HttpGet(repo .. "FieldData.lua?t="..tick()) end)
     if success1 then 
         local func = loadstring(content1)
         if func then FieldDataDB = func() end
-    else
-        if LogFunc then LogFunc("❌ Lỗi tải FieldData!", Color3.fromRGB(255, 0, 0)) end
     end
 
-    -- 2. Load TokenData
     local success2, content2 = pcall(function() return game:HttpGet(repo .. "TokenData.lua?t="..tick()) end)
     if success2 then 
         local func = loadstring(content2)
@@ -30,8 +25,6 @@ local function LoadExternalModules(LogFunc)
             local mod = func()
             TokenPriorityDB = mod.Tokens
         end 
-    else
-        if LogFunc then LogFunc("❌ Lỗi tải TokenData!", Color3.fromRGB(255, 0, 0)) end
     end
 end
 
@@ -48,7 +41,7 @@ local function IsBackpackFull()
     return false
 end
 
--- Hàm hỗ trợ: Kiểm tra điểm trong Field
+-- Hàm hỗ trợ: Kiểm tra điểm trong Field (Bỏ qua trục Y để chính xác hơn)
 local function IsPointInField(point, fieldInfo)
     if not fieldInfo or not fieldInfo.Pos or not fieldInfo.Size then return false end
     local halfX = fieldInfo.Size.X / 2
@@ -58,7 +51,12 @@ local function IsPointInField(point, fieldInfo)
     return (dx <= halfX and dz <= halfZ)
 end
 
--- Logic Tìm Token (Item > Token > Gần nhất)
+-- Hàm tính khoảng cách ngang (Bỏ qua chiều cao Y) -> Fix lỗi đứng chờ
+local function GetHorizontalDistance(p1, p2)
+    return (Vector3.new(p1.X, 0, p1.Z) - Vector3.new(p2.X, 0, p2.Z)).Magnitude
+end
+
+-- Logic Tìm Token
 local function FindBestToken(fieldInfo)
     if not TokenPriorityDB then return nil end
     local Character = LocalPlayer.Character
@@ -101,7 +99,6 @@ end
 local isFarming = false
 
 function module.StartFarm(fieldName, LogFunc, Utils)
-    -- Tải dữ liệu nếu chưa có
     if not FieldDataDB or not TokenPriorityDB then
         if LogFunc then LogFunc("Đang tải dữ liệu...", Color3.fromRGB(255, 255, 0)) end
         LoadExternalModules(LogFunc)
@@ -117,11 +114,20 @@ function module.StartFarm(fieldName, LogFunc, Utils)
     isFarming = true
     if LogFunc then LogFunc("🚜 Bắt đầu Farm: " .. fieldName, Color3.fromRGB(0, 255, 0)) end
 
-    -- Auto Dig
+    -- ======================================================
+    -- FIX 1: AUTO DIG BẰNG CÁCH KÍCH HOẠT TOOL TRỰC TIẾP
+    -- ======================================================
     task.spawn(function()
         while isFarming do
-            VirtualUser:ClickButton1(Vector2.new())
-            task.wait(0.2)
+            local char = LocalPlayer.Character
+            if char then
+                -- Tìm công cụ (Tool) đang cầm trên tay
+                local tool = char:FindFirstChildOfClass("Tool")
+                if tool then
+                    tool:Activate() -- Kích hoạt tool (Click thật)
+                end
+            end
+            task.wait(0.1) -- Tốc độ click (0.1s/lần)
         end
     end)
 
@@ -129,13 +135,11 @@ function module.StartFarm(fieldName, LogFunc, Utils)
     local Humanoid = Character:WaitForChild("Humanoid")
     local RootPart = Character:WaitForChild("HumanoidRootPart")
 
-    -- Đến Field
     Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
 
     while isFarming do
         task.wait()
         
-        -- Hồi sinh
         if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             LocalPlayer.CharacterAdded:Wait()
             Character = LocalPlayer.Character
@@ -144,7 +148,7 @@ function module.StartFarm(fieldName, LogFunc, Utils)
             Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
         end
 
-        -- 1. Convert khi đầy
+        -- 1. Convert
         if IsBackpackFull() then
             if LogFunc then LogFunc("🎒 Đầy Balo -> Về tổ...", Color3.fromRGB(255, 200, 0)) end
             
@@ -177,8 +181,19 @@ function module.StartFarm(fieldName, LogFunc, Utils)
         if targetToken then
             Humanoid:MoveTo(targetToken.Position)
             local timeout = 0
+            
+            -- ======================================================
+            -- FIX 2: LOGIC DI CHUYỂN MƯỢT HƠN
+            -- ======================================================
             while targetToken and targetToken.Parent and targetToken.Transparency == 0 and timeout < 20 do
-                if (RootPart.Position - targetToken.Position).Magnitude < 4 then break end
+                -- Tính khoảng cách ngang (bỏ qua trục Y)
+                local dist = GetHorizontalDistance(RootPart.Position, targetToken.Position)
+                
+                -- Tăng phạm vi nhận diện lên 6 studs để "lướt qua" là tính xong ngay
+                if dist < 6 then 
+                    break -- Đã tới đủ gần, thoát vòng lặp ngay lập tức để tìm cái khác
+                end
+                
                 task.wait(0.1)
                 timeout = timeout + 1
             end
@@ -190,7 +205,7 @@ function module.StartFarm(fieldName, LogFunc, Utils)
             
             Humanoid:MoveTo(dest)
             local walkTime = 0
-            while (RootPart.Position - dest).Magnitude > 4 and walkTime < 20 do
+            while (RootPart.Position - dest).Magnitude > 6 and walkTime < 20 do
                 task.wait(0.1)
                 walkTime = walkTime + 1
                 if FindBestToken(fieldInfo) then break end
