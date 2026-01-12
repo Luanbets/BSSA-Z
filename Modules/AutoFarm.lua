@@ -33,23 +33,20 @@ local function LoadExternalModules(LogFunc)
 end
 
 -- =========================================================
--- 2. HÀM TÌM TỔ (ĐÃ SỬA THEO CODE CỦA BẠN + FIX LỖI ẢNH)
+-- 2. HÀM TÌM TỔ & HỖ TRỢ
 -- =========================================================
 local function GetMyHivePos()
     local honeycombs = Workspace:FindFirstChild("Honeycombs") or Workspace:FindFirstChild("Hives")
     if not honeycombs then return nil end
 
     for _, hive in pairs(honeycombs:GetChildren()) do
-        -- [LOGIC CỦA BẠN] Kiểm tra chủ sở hữu
         if hive:FindFirstChild("Owner") and hive.Owner.Value == LocalPlayer then
-            
-            -- [FIX LỖI] Kiểm tra kỹ loại SpawnPos để tránh lỗi "CFrame is not a valid member"
             local spawnPos = hive:FindFirstChild("SpawnPos")
             if spawnPos then
                 if spawnPos:IsA("BasePart") then
-                    return spawnPos.CFrame -- Nếu là Part thì lấy CFrame
+                    return spawnPos.CFrame 
                 elseif spawnPos:IsA("CFrameValue") or spawnPos:IsA("ValueBase") then
-                    return spawnPos.Value  -- Nếu là Value thì lấy .Value (Đây là chỗ bị lỗi trong ảnh)
+                    return spawnPos.Value  
                 end
             end
         end
@@ -57,9 +54,6 @@ local function GetMyHivePos()
     return nil
 end
 
--- =========================================================
--- 3. CÁC HÀM HỖ TRỢ KHÁC
--- =========================================================
 local function GetIDFromTexture(texture)
     return tostring(string.match(texture, "%d+$"))
 end
@@ -71,6 +65,14 @@ local function IsBackpackFull()
     return false
 end
 
+-- Hàm lấy số phấn hiện tại (để kiểm tra đã sạch chưa)
+local function GetCurrentPollen()
+    if LocalPlayer.CoreStats and LocalPlayer.CoreStats:FindFirstChild("Pollen") then
+        return LocalPlayer.CoreStats.Pollen.Value
+    end
+    return 0
+end
+
 local function IsPointInField(point, fieldInfo)
     if not fieldInfo or not fieldInfo.Pos or not fieldInfo.Size then return false end
     local halfX = fieldInfo.Size.X / 2
@@ -80,7 +82,7 @@ local function IsPointInField(point, fieldInfo)
     return (dx <= halfX and dz <= halfZ)
 end
 
--- Tìm Token (Logic Chạy Xuyên Qua)
+-- Tìm Token
 local function FindBestToken(fieldInfo)
     if not TokenPriorityDB then return nil end
     local Character = LocalPlayer.Character
@@ -120,7 +122,7 @@ local function FindBestToken(fieldInfo)
 end
 
 -- =========================================================
--- 4. CHỨC NĂNG FARM CHÍNH
+-- 3. CHỨC NĂNG FARM CHÍNH
 -- =========================================================
 local isFarming = false
 
@@ -140,7 +142,7 @@ function module.StartFarm(fieldName, LogFunc, Utils)
     isFarming = true
     if LogFunc then LogFunc("🚜 Bắt đầu Farm: " .. fieldName, Color3.fromRGB(0, 255, 0)) end
 
-    -- Auto Dig (Remote Server)
+    -- Auto Dig
     task.spawn(function()
         while isFarming do
             pcall(function() ReplicatedStorage.Events.ToolCollect:FireServer() end)
@@ -165,46 +167,51 @@ function module.StartFarm(fieldName, LogFunc, Utils)
             Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
         end
 
-        -- 1. XỬ LÝ VỀ TỔ (FIX LỖI CFRAME/VALUE)
+        -- 1. XỬ LÝ VỀ TỔ (CONVERT 100%)
         if IsBackpackFull() then
-            if LogFunc then LogFunc("🎒 Balo đầy! Đang tìm tổ...", Color3.fromRGB(255, 200, 0)) end
+            if LogFunc then LogFunc("🎒 Balo đầy! Về tổ...", Color3.fromRGB(255, 200, 0)) end
             
-            local myHivePos = GetMyHivePos() -- Đã dùng logic mới
+            local myHivePos = GetMyHivePos()
 
             if myHivePos then
-                -- Về tổ: Đứng cao hơn và lùi ra 1 chút để dễ click
+                -- Bay về tổ
                 Utils.Tween(myHivePos * CFrame.new(0, 4, 6), function() end)
                 
                 local convertTimeout = 0
+                -- VÒNG LẶP: Chạy cho đến khi PHẤN = 0 (Sạch balo)
                 repeat
                     ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
-                    task.wait(2)
+                    task.wait(2) -- Mỗi 2 giây bấm nút 1 lần
+                    
                     convertTimeout = convertTimeout + 1
-                    if convertTimeout > 30 then break end 
-                until not IsBackpackFull() or not isFarming
+                    if convertTimeout > 60 then break end -- Timeout 120s
+                    
+                -- Điều kiện thoát: Phấn < 10 (Gần như bằng 0) HOẶC tắt farm
+                until GetCurrentPollen() < 10 or not isFarming
                 
-                if LogFunc then LogFunc("✅ Convert xong! Quay lại...", Color3.fromRGB(0, 255, 0)) end
+                -- YÊU CẦU CỦA BẠN: ĐỢI THÊM 6 GIÂY CHO CHẮC
+                if LogFunc then LogFunc("⏳ Đợi thêm 6s cho chắc...", Color3.fromRGB(255, 255, 255)) end
+                task.wait(6)
+                
+                if LogFunc then LogFunc("✅ Convert sạch sẽ! Đi farm...", Color3.fromRGB(0, 255, 0)) end
                 Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
             else
-                if LogFunc then LogFunc("⚠️ Không tìm thấy tổ! (Kiểm tra lại code)", Color3.fromRGB(255, 0, 0)) end
+                if LogFunc then LogFunc("⚠️ Không tìm thấy tổ!", Color3.fromRGB(255, 0, 0)) end
                 task.wait(2)
             end
         end
 
-        -- 2. Nhặt Token (Lướt qua không dừng)
+        -- 2. Nhặt Token
         local targetToken = FindBestToken(fieldInfo)
         
         if targetToken then
             Humanoid:MoveTo(targetToken.Position)
             local stuckCount = 0
-            
-            -- Lặp cho đến khi token biến mất (đã ăn được)
             while targetToken and targetToken.Parent and targetToken.Transparency == 0 do
-                Humanoid:MoveTo(targetToken.Position) -- Spam lệnh đi để không dừng
+                Humanoid:MoveTo(targetToken.Position)
                 if not IsPointInField(RootPart.Position, fieldInfo) then break end
-                
                 stuckCount = stuckCount + 1
-                if stuckCount > 60 then break end -- Kẹt quá 2s thì bỏ
+                if stuckCount > 60 then break end
                 RunService.Heartbeat:Wait()
             end
         else
