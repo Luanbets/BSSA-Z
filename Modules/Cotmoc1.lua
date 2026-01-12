@@ -1,124 +1,105 @@
 local module = {}
 
--- Tọa độ Shop (Giữ nguyên như của bạn)
+-- Giữ nguyên toạ độ Shop của bạn
 local SHOPS = {
     Egg  = CFrame.new(-140.41, 4.69, 243.97),
     Tool = CFrame.new(84.88, 4.51, 290.49)
 }
 
-function module.Run(Toolkit)
-    -- 1. BUNG TOOLKIT (Lấy đồ nghề từ Main)
+function module.Run(LogFunc, WaitFunc, Toolkit)
+    -- BUNG TOOLKIT RA DÙNG
     local Utils = Toolkit.Utils
     local ShopUtils = Toolkit.ShopUtils
     local AutoFarm = Toolkit.AutoFarm
     local PlayerUtils = Toolkit.PlayerUtils
-    local RedeemCode = Toolkit.RedeemCode -- Lấy worker nhập code
+    local RedeemCode = Toolkit.RedeemCode
+    local ClaimHive = Toolkit.ClaimHive
     
-    local LocalPlayer = game:GetService("Players").LocalPlayer
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local Data = Utils.LoadData()
 
-    -- 2. HÀM HỖ TRỢ: MUA ITEM (Tự bay đến shop và mua)
-    local function GoBuy(shopType, category, itemType, logText)
-        -- Dừng Farm
-        if AutoFarm.Stop then AutoFarm.Stop() end
-        task.wait(0.5)
-
-        -- Bay đến Shop
-        local pos = (shopType == "Egg") and SHOPS.Egg or SHOPS.Tool
-        Utils.Tween(pos)
-        task.wait(1)
-
-        -- Mua
-        print("🛒 Đang mua: " .. logText)
-        game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {
-            ["Type"] = itemType, 
-            ["Category"] = category,
-            ["Amount"] = 1
-        })
-        task.wait(1.5)
-    end
-
-    -- ==========================================================
-    -- BƯỚC 0: NHẬP CODE (Ưu tiên số 1 - Chạy xong mới làm việc khác)
-    -- ==========================================================
-    local data = Utils.LoadData()
-    if not data.RedeemDone then
-        print("🎫 Bắt đầu nhập Code tân thủ...")
-        if RedeemCode then 
-            RedeemCode.Run(print, task.wait, Utils) -- Chạy worker nhập code
-        end
-        -- Sau khi nhập xong, return để Main refresh lại tiền nong
+    -- 1. ƯU TIÊN TUYỆT ĐỐI: NHẬN TỔ & CODE
+    if not ClaimHive.Run(LogFunc, WaitFunc, Utils) then
+        -- Nếu chưa có tổ thì chưa làm gì cả
         return 
     end
 
-    -- ==========================================================
-    -- BƯỚC 1: MUA TRỨNG (Mục tiêu: Có 2 con ong)
-    -- ==========================================================
+    if not Data.RedeemDone then
+        LogFunc("🎫 Redeem Codes...")
+        RedeemCode.Run(LogFunc, WaitFunc, Utils)
+        return -- Xong việc thì return để Main lặp lại
+    end
+
+    -- 2. LIST MỤC TIÊU (GIỮ NGUYÊN THỨ TỰ CỦA BẠN)
+    -- Logic: Mua 2 trứng -> Mua Backpack -> Mua Rake
+    
+    -- === MỤC TIÊU 1: 2 CON ONG ===
     local currentBees = AutoFarm.GetRealBeeCount()
     if currentBees < 2 then
-        print("🥚 Mục tiêu: Mua trứng (Hiện có: " .. currentBees .. "/2)")
+        LogFunc("🥚 Goal: Get 2 Bees ("..currentBees.."/2)")
         
-        -- Check tiền (Giá trứng Basic là 1000 hoặc tùy server, mình check dư ra tí cho chắc)
-        local price = 1000 
-        local myHoney = PlayerUtils.GetHoney()
-
-        if myHoney >= price then
-            GoBuy("Egg", "Eggs", "Basic", "Basic Egg")
-            return -- Mua xong return để Main check lại số ong
+        local eggPrice = 1000 -- Basic Egg
+        if PlayerUtils.GetHoney() >= eggPrice then
+            -- MUA
+            LogFunc("💰 Buying Egg...")
+            if AutoFarm.StopFarm then AutoFarm.StopFarm() end -- Dừng farm
+            Utils.Tween(SHOPS.Egg)
+            task.wait(1)
+            ReplicatedStorage.Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Basic", ["Amount"]=1, ["Category"]="Eggs"})
+            task.wait(2)
         else
-            print("📉 Thiếu tiền mua trứng ("..myHoney.."/"..price.."). Đi cày...")
-            -- Gọi AutoFarm
-            Toolkit.AutoFarm.StartFarm("Sunflower Field", Utils, Toolkit.FieldData, Toolkit.TokenData)
-            return
-        end
-    end
-
-    -- ==========================================================
-    -- BƯỚC 2: MUA DỤNG CỤ (Theo thứ tự: Backpack -> Rake)
-    -- ==========================================================
-    
-    -- Danh sách việc cần làm tiếp theo (Đúng thứ tự bạn yêu cầu)
-    local ItemsToBuy = {
-        {Name = "Backpack", Category = "Accessory", Price = 5500}, -- Cần chỉnh lại giá nếu sai
-        {Name = "Rake",     Category = "Collector", Price = 800}   -- Cần chỉnh lại giá nếu sai
-    }
-
-    for _, item in ipairs(ItemsToBuy) do
-        -- Kiểm tra đã có món này chưa
-        local hasItem = PlayerUtils.GetItemAmount(item.Name) > 0 or data["Has_"..item.Name]
-        
-        -- Nếu chưa có -> Đây là mục tiêu hiện tại
-        if not hasItem then
-            print("🎯 Mục tiêu hiện tại: " .. item.Name)
-            
-            -- Dùng ShopUtils để check tiền chuẩn xác (nó check cả nguyên liệu nếu cần)
-            local canBuy = ShopUtils.CheckBuy(item.Name, print)
-            
-            if canBuy then
-                -- ĐỦ TIỀN -> ĐI MUA
-                GoBuy("Tool", item.Category, item.Name, item.Name)
-                Utils.SaveData("Has_"..item.Name, true) -- Lưu lại là đã mua
-                return
-            else
-                -- THIẾU TIỀN -> ĐI FARM
-                print("🌾 Chưa đủ tiền mua " .. item.Name .. ". Đang Auto Farm...")
-                
-                -- Tìm bãi farm tốt nhất (Logic cũ: Sunflower cho dễ)
-                Toolkit.AutoFarm.StartFarm("Sunflower Field", Utils, Toolkit.FieldData, Toolkit.TokenData)
-                return
+            -- FARM
+            LogFunc("🌾 Farming for Egg...")
+            -- Gọi AutoFarm (Main sẽ loop lại nên farm vẫn chạy)
+            if not AutoFarm.IsFarming() then
+                AutoFarm.StartFarm("Sunflower Field", LogFunc, Utils, Toolkit.FieldData, Toolkit.TokenData)
             end
         end
+        return -- Xử lý xong 1 nhịp, return để Main check lại
     end
 
-    -- ==========================================================
-    -- HOÀN THÀNH COTMOC1
-    -- ==========================================================
-    -- Nếu chạy xuống tới đây nghĩa là: Đã nhập code, đủ 2 ong, có Backpack, có Rake.
-    print("🎉 Đã hoàn thành Cột Mốc 1 (Starter)!")
-    Utils.SaveData("Cotmoc1Done", true)
-    
-    -- Lúc này Main.lua sẽ thấy bee >= 2 (hoặc điều kiện khác) để chuyển script
-    -- Nhưng nếu Main yêu cầu 5 ong mới qua zone mới, bạn có thể thêm logic mua trứng tiếp ở đây.
+    -- === MỤC TIÊU 2 & 3: BACKPACK VÀ RAKE ===
+    local toolsToBuy = {
+        {Name = "Backpack", Price = 5500, Category = "Accessory"},
+        {Name = "Rake",     Price = 800,  Category = "Collector"}
+    }
+
+    for _, tool in ipairs(toolsToBuy) do
+        -- Kiểm tra đã có chưa
+        if PlayerUtils.GetItemAmount(tool.Name) == 0 and not Data["Has_"..tool.Name] then
+            LogFunc("🎯 Goal: " .. tool.Name)
+            
+            -- Dùng ShopUtils check cho chuẩn (cả nguyên liệu)
+            local canBuy = ShopUtils.CheckBuy(tool.Name, LogFunc)
+            
+            if canBuy then
+                -- MUA
+                LogFunc("🛒 Buying " .. tool.Name)
+                if AutoFarm.StopFarm then AutoFarm.StopFarm() end
+                Utils.Tween(SHOPS.Tool)
+                task.wait(1)
+                ReplicatedStorage.Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]=tool.Name, ["Category"]=tool.Category})
+                Utils.SaveData("Has_"..tool.Name, true)
+                task.wait(2)
+            else
+                -- FARM
+                LogFunc("🌾 Farming for " .. tool.Name)
+                if not AutoFarm.IsFarming() then
+                    AutoFarm.StartFarm("Sunflower Field", LogFunc, Utils, Toolkit.FieldData, Toolkit.TokenData)
+                end
+            end
+            return -- Tập trung 1 món thôi
+        end
+    end
+
+    -- Nếu chạy xuống đây tức là đã xong hết
+    LogFunc("✅ Starter Completed! Need to level up bees...")
+    -- Farm tự do để chờ đủ 5 ong qua zone mới
+    if currentBees < 5 then
+        if not AutoFarm.IsFarming() then
+            AutoFarm.StartFarm("Mushroom Field", LogFunc, Utils, Toolkit.FieldData, Toolkit.TokenData) -- Đổi bãi farm cho đổi gió
+        end
+    end
 end
 
 return module
