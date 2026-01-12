@@ -43,37 +43,38 @@ local function getRealBeeCount()
 end
 
 -- =========================================================
--- 2. DỮ LIỆU FIELD DATA (DATA CỐ ĐỊNH)
+-- 2. DỮ LIỆU FIELD DATA (ĐÃ CẬP NHẬT CHÍNH XÁC + SIZE)
 -- =========================================================
+-- Lưu ý: Position đã được nâng nhẹ trục Y để nhân vật đứng trên mặt đất
 local FieldData = {
     -- [0 Bee Zone]
-    ["Sunflower Field"]   = {ID = 10614, Pos = Vector3.new(81, 5, 132),  Color = "White", ReqBees = 0},
-    ["Dandelion Field"]   = {ID = 10415, Pos = Vector3.new(144, 5, 72),  Color = "White", ReqBees = 0},
-    ["Blue Flower Field"] = {ID = 11613, Pos = Vector3.new(172, 5, 68),  Color = "Blue",  ReqBees = 0},
-    ["Mushroom Field"]    = {ID = 11758, Pos = Vector3.new(128, 5, 92),  Color = "Red",   ReqBees = 0},
-    ["Clover Field"]      = {ID = 12646, Pos = Vector3.new(106, 5, 119), Color = "Mixed", ReqBees = 0},
+    ["Sunflower Field"]   = {ID = 10614, Pos = Vector3.new(-208.95, 4, 176.58), Size = Vector3.new(80.71, 1, 131.51), Color = "White", ReqBees = 0},
+    ["Dandelion Field"]   = {ID = 10415, Pos = Vector3.new(-29.70, 4, 221.57),  Size = Vector3.new(143.65, 1, 72.50), Color = "White", ReqBees = 0},
+    ["Blue Flower Field"] = {ID = 11613, Pos = Vector3.new(146.87, 4, 99.31),   Size = Vector3.new(171.63, 2, 67.67), Color = "Blue",  ReqBees = 0},
+    ["Mushroom Field"]    = {ID = 11758, Pos = Vector3.new(-89.70, 4, 111.73),  Size = Vector3.new(128.50, 2, 91.50), Color = "Red",   ReqBees = 0},
+    ["Clover Field"]      = {ID = 12646, Pos = Vector3.new(157.55, 34, 196.35), Size = Vector3.new(106.49, 2, 118.75),Color = "Mixed", ReqBees = 0},
 
     -- [5 Bee Zone]
-    ["Bamboo Field"]      = {ID = 11702, Pos = Vector3.new(156, 5, 75),  Color = "Blue",  ReqBees = 5},
-    ["Strawberry Field"]  = {ID = 9529,  Pos = Vector3.new(90, 5, 106),  Color = "Red",   ReqBees = 5},
-    ["Spider Field"]      = {ID = 11907, Pos = Vector3.new(112, 5, 106), Color = "White", ReqBees = 5},
+    ["Bamboo Field"]      = {ID = 11702, Pos = Vector3.new(132.96, 20, -25.60), Size = Vector3.new(156.45, 2, 74.80), Color = "Blue",  ReqBees = 5},
+    ["Strawberry Field"]  = {ID = 9529,  Pos = Vector3.new(-178.17, 20, -9.85), Size = Vector3.new(89.65, 2, 106.29), Color = "Red",   ReqBees = 5},
+    ["Spider Field"]      = {ID = 11907, Pos = Vector3.new(-43.47, 20, -13.59), Size = Vector3.new(112.31, 2, 106.02),Color = "White", ReqBees = 5},
 
     -- [10 Bee Zone]
-    ["Stump Field"]       = {ID = 12519, Pos = Vector3.new(110, 5, 113), Color = "Mixed", ReqBees = 10},
-    ["Pineapple Patch"]   = {ID = 11906, Pos = Vector3.new(131, 5, 91),  Color = "White", ReqBees = 10},
+    ["Stump Field"]       = {ID = 12519, Pos = Vector3.new(424.48, 96, -174.81),Size = Vector3.new(110.48, 3, 113.31),Color = "Mixed", ReqBees = 10},
+    ["Pineapple Patch"]   = {ID = 11906, Pos = Vector3.new(256.50, 68, -207.48),Size = Vector3.new(130.67, 2, 91.11), Color = "White", ReqBees = 10},
 
     -- [15 Bee Zone]
-    ["Rose Field"]        = {ID = 10198, Pos = Vector3.new(123, 5, 83),  Color = "Red",   ReqBees = 15},
-    ["Pumpkin Patch"]     = {ID = 9289,  Pos = Vector3.new(135, 5, 69),  Color = "White", ReqBees = 15},
-    ["Cactus Field"]      = {ID = 9289,  Pos = Vector3.new(135, 5, 69),  Color = "Mixed", ReqBees = 15},
-    ["Pine Tree Forest"]  = {ID = 11010, Pos = Vector3.new(91, 5, 122),  Color = "Blue",  ReqBees = 15},
+    ["Rose Field"]        = {ID = 10198, Pos = Vector3.new(-327.46, 20, 129.50),Size = Vector3.new(123.07, 1, 82.86), Color = "Red",   ReqBees = 15},
+    ["Pumpkin Patch"]     = {ID = 9289,  Pos = Vector3.new(-188.50, 68, -183.85),Size = Vector3.new(135.00, 1, 68.81), Color = "White", ReqBees = 15},
+    ["Cactus Field"]      = {ID = 9289,  Pos = Vector3.new(-188.50, 68, -101.60),Size = Vector3.new(135.00, 1, 68.81), Color = "Mixed", ReqBees = 15},
+    ["Pine Tree Forest"]  = {ID = 11010, Pos = Vector3.new(-328.67, 68, -187.35),Size = Vector3.new(90.62, 1, 121.50), Color = "Blue",  ReqBees = 15},
 
     -- [25 Bee Zone]
-    ["Mountain Top Field"]= {ID = 10830, Pos = Vector3.new(98, 5, 111),  Color = "Mixed", ReqBees = 25},
+    ["Mountain Top Field"]= {ID = 10830, Pos = Vector3.new(77.68, 176, -165.43),Size = Vector3.new(97.73, 1, 110.82), Color = "Mixed", ReqBees = 25},
 
     -- [35 Bee Zone]
-    ["Coconut Field"]     = {ID = 10146, Pos = Vector3.new(120, 5, 84),  Color = "White", ReqBees = 35},
-    ["Pepper Patch"]      = {ID = 9108,  Pos = Vector3.new(82, 5, 111),  Color = "Red",   ReqBees = 35},
+    ["Coconut Field"]     = {ID = 10146, Pos = Vector3.new(-254.48, 71, 469.46),Size = Vector3.new(120.31, 1, 84.33), Color = "White", ReqBees = 35},
+    ["Pepper Patch"]      = {ID = 9108,  Pos = Vector3.new(-488.76, 123, 535.68),Size = Vector3.new(82.39, 1, 110.55),Color = "Red",   ReqBees = 35},
 }
 
 -- =========================================================
@@ -88,16 +89,16 @@ local MaterialMap = {
 }
 
 -- =========================================================
--- 4. HÀM TRẢ VỀ CÁNH ĐỒNG TỐT NHẤT (RETURN ONLY)
+-- 4. HÀM TÌM CÁNH ĐỒNG TỐT NHẤT (RETURN INFO)
 -- =========================================================
--- Cách dùng: local fieldName = GetBestFieldForMaterial("Honey")
--- Nếu không tìm thấy hoặc lỗi, nó sẽ trả về nil
-
 function GetBestFieldForMaterial(targetName)
-    local playerBees = getRealBeeCount() -- Tự động lấy số ong thật (Silent)
+    local playerBees = getRealBeeCount() -- Tự động lấy số ong thật
     local possibleFields = MaterialMap[targetName]
     
-    if not possibleFields then return nil end
+    if not possibleFields then 
+        warn("Không tìm thấy dữ liệu cho vật phẩm: " .. tostring(targetName))
+        return nil 
+    end
 
     local bestField = nil
     local highestReq = -1 
@@ -114,5 +115,32 @@ function GetBestFieldForMaterial(targetName)
         end
     end
     
-    return bestField -- Trả về tên cánh đồng (String) để UI sử dụng
+    -- Trả về cả Tên và Data (Pos, Size) để dùng luôn
+    if bestField then
+        return bestField, FieldData[bestField]
+    else
+        return nil
+    end
+end
+
+-- =========================================================
+-- VÍ DỤ CÁCH DÙNG (TEST)
+-- =========================================================
+
+-- Giả sử bạn muốn farm Honey
+local targetMaterial = "Honey"
+local fieldName, fieldInfo = GetBestFieldForMaterial(targetMaterial)
+
+if fieldName and fieldInfo then
+    print("-------------------------------------------------")
+    print("Đang đi tới cánh đồng tốt nhất cho: " .. targetMaterial)
+    print("Tên đồng: " .. fieldName)
+    print("Toạ độ tâm (Position): " .. tostring(fieldInfo.Pos))
+    print("Kích thước vùng (Size): " .. tostring(fieldInfo.Size))
+    print("-------------------------------------------------")
+    
+    -- Code Teleport đơn giản (Minh hoạ)
+    -- lp.Character.HumanoidRootPart.CFrame = CFrame.new(fieldInfo.Pos)
+else
+    print("Bạn chưa đủ ong để farm vật phẩm này hoặc tên sai!")
 end
