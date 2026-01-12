@@ -6,123 +6,131 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
 local isFarming = false
-local currentField = nil
 
--- =========================================================
--- HÀM HỖ TRỢ (PUBLIC CHO MAIN DÙNG)
--- =========================================================
-function module.IsFarming() return isFarming end
-
-function module.GetRealBeeCount()
-    local honeycombs = Workspace:FindFirstChild("Honeycombs") or Workspace:FindFirstChild("Hives")
-    if not honeycombs then return 0 end
-    for _, hive in pairs(honeycombs:GetChildren()) do
-        if hive:FindFirstChild("Owner") and hive.Owner.Value == LocalPlayer then
-            local cells = hive:FindFirstChild("Cells")
-            if cells then
-                local count = 0
-                for _, cell in pairs(cells:GetChildren()) do
-                    if cell:IsA("Model") and string.sub(cell.Name, 1, 1) == "C" then
-                        local typeVal = cell:FindFirstChild("CellType")
-                        if typeVal and typeVal.Value ~= "Empty" and typeVal.Value ~= 0 then count = count + 1 end
-                    end
-                end
-                return count
-            end
-        end
-    end
-    return 0
+-- Helper: Lấy ID Texture
+local function GetIDFromTexture(texture)
+    return tostring(string.match(texture, "%d+$"))
 end
 
--- =========================================================
--- HÀM FARM CHÍNH (Đã đồng bộ)
--- =========================================================
-function module.StartFarm(fieldName, LogFunc, Utils, FieldData, TokenData)
-    -- Nếu đang farm đúng chỗ rồi thì thôi không reset lại
-    if isFarming and currentField == fieldName then return end
-    
-    module.StopFarm() -- Reset trước khi chạy mới
-    isFarming = true
-    currentField = fieldName
-    
-    -- Lấy data từ biến truyền vào (KHÔNG TẢI LẠI)
-    local fieldInfo = FieldData[fieldName]
-    if not fieldInfo then
-        if LogFunc then LogFunc("❌ AutoFarm: Invalid Field " .. tostring(fieldName)) end
-        isFarming = false
-        return
+-- Helper: Tìm Hive
+local function GetMyHivePos()
+    local honeycombs = Workspace:FindFirstChild("Honeycombs") or Workspace:FindFirstChild("Hives")
+    if not honeycombs then return nil end
+    for _, hive in pairs(honeycombs:GetChildren()) do
+        if hive:FindFirstChild("Owner") and hive.Owner.Value == LocalPlayer then
+            return hive:FindFirstChild("SpawnPos") and hive.SpawnPos.Value
+        end
     end
+    return nil
+end
 
-    if LogFunc then LogFunc("🚜 AutoFarm: " .. fieldName) end
-
-    -- Di chuyển đến bãi
-    Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
+-- Helper: Tìm Token ngon nhất (Dùng TokenData được truyền vào)
+local function FindBestToken(fieldInfo, TokenData)
+    local Character = LocalPlayer.Character
+    if not Character or not Character:FindFirstChild("HumanoidRootPart") then return nil end
+    local myPos = Character.HumanoidRootPart.Position
     
-    -- Vòng lặp Farm (Chạy trên luồng riêng để không chặn Main)
-    task.spawn(function()
-        while isFarming do
-            RunService.Heartbeat:Wait()
-            local Character = LocalPlayer.Character
-            if not Character or not Character:FindFirstChild("HumanoidRootPart") then task.wait(1) continue end
-            
-            local Humanoid = Character:FindFirstChild("Humanoid")
-            local RootPart = Character:FindFirstChild("HumanoidRootPart")
+    local bestToken = nil
+    local bestPriority = -1
+    local minDistance = 99999
 
-            -- 1. Auto Dig
-            pcall(function() ReplicatedStorage.Events.ToolCollect:FireServer() end)
+    local collectibles = Workspace:FindFirstChild("Collectibles")
+    if collectibles then
+        for _, token in pairs(collectibles:GetChildren()) do
+            if token.Transparency == 0 and token:FindFirstChild("FrontDecal") then
+                local texID = "rbxassetid://" .. GetIDFromTexture(token.FrontDecal.Texture)
+                
+                -- LẤY DỮ LIỆU TỪ TOKENDATA BÊN NGOÀI
+                local tokenInfo = TokenData.Tokens[texID]
+                
+                -- Logic kiểm tra vị trí
+                local dx = math.abs(token.Position.X - fieldInfo.Pos.X)
+                local dz = math.abs(token.Position.Z - fieldInfo.Pos.Z)
+                local isInField = (dx <= fieldInfo.Size.X/2 and dz <= fieldInfo.Size.Z/2)
 
-            -- 2. Logic Balo Đầy (Convert)
-            if LocalPlayer.CoreStats.Pollen.Value >= LocalPlayer.CoreStats.Capacity.Value then
-                -- Logic quay về tổ (như code cũ của bạn)
-                -- ... Bạn có thể copy lại đoạn convert Hive ở đây ...
-                -- Tạm thời tôi để nó đứng im convert mật tại chỗ (Dùng Honey Bee nếu có) hoặc chạy về
-                 ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
-                 task.wait(10) -- Giả lập thời gian convert
-            end
-
-            -- 3. Tìm Token (Sử dụng TokenData được truyền vào)
-            -- Code tìm token ở đây giữ nguyên logic của bạn nhưng dùng TokenData.Tokens
-            -- Ví dụ:
-            local bestToken = nil
-            local bestPrio = 0
-            
-            local cols = Workspace:FindFirstChild("Collectibles")
-            if cols then
-                for _, v in pairs(cols:GetChildren()) do
-                    if (v.Position - fieldInfo.Pos).Magnitude < (fieldInfo.Size.X/1.5) and v.Transparency == 0 then
-                        local tex = v:FindFirstChild("FrontDecal") and v.FrontDecal.Texture
-                        -- Chuẩn hóa ID texture
-                        local id = string.match(tex or "", "%d+$")
-                        local fullId = "rbxassetid://" .. (id or "")
-                        
-                        local info = TokenData.Tokens[fullId]
-                        local prio = (info and info.Priority) or 1
-                        
-                        if prio > bestPrio then
-                            bestPrio = prio
-                            bestToken = v
+                if tokenInfo and isInField then
+                    local priority = tokenInfo.Priority or 0
+                    local dist = (token.Position - myPos).Magnitude
+                    
+                    if priority > bestPriority then
+                        bestPriority = priority
+                        minDistance = dist
+                        bestToken = token
+                    elseif priority == bestPriority then
+                        if dist < minDistance then
+                            minDistance = dist
+                            bestToken = token
                         end
                     end
                 end
             end
+        end
+    end
+    return bestToken
+end
 
-            -- 4. Di chuyển
-            if bestToken then
-                Humanoid:MoveTo(bestToken.Position)
-            else
-                -- Đi random
-                local rx = math.random(-20, 20)
-                local rz = math.random(-20, 20)
-                Humanoid:MoveTo(fieldInfo.Pos + Vector3.new(rx, 0, rz))
-                task.wait(0.5)
-            end
+-- MAIN FUNCTION: START FARM
+-- Nhận toàn bộ data từ bên ngoài vào
+function module.StartFarm(fieldName, LogFunc, Utils, FieldData, TokenData)
+    local fieldInfo = FieldData[fieldName]
+    if not fieldInfo then
+        if LogFunc then LogFunc("❌ Không tìm thấy Field: " .. tostring(fieldName), Color3.fromRGB(255, 0, 0)) end
+        return
+    end
+
+    isFarming = true
+    if LogFunc then LogFunc("🚜 Farming: " .. fieldName, Color3.fromRGB(0, 255, 0)) end
+
+    -- Auto Dig Loop
+    task.spawn(function()
+        while isFarming do
+            pcall(function() ReplicatedStorage.Events.ToolCollect:FireServer() end)
+            task.wait(0.2)
         end
     end)
+
+    local Character = LocalPlayer.Character
+    local Humanoid = Character:WaitForChild("Humanoid")
+    
+    Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
+
+    while isFarming do
+        RunService.Heartbeat:Wait()
+        if not LocalPlayer.Character then LocalPlayer.CharacterAdded:Wait() end
+        
+        -- 1. Check Balo đầy -> Về tổ
+        if LocalPlayer.CoreStats.Pollen.Value >= LocalPlayer.CoreStats.Capacity.Value then
+            if LogFunc then LogFunc("🎒 Balo đầy -> Convert", Color3.fromRGB(255, 200, 0)) end
+            local myHive = GetMyHivePos()
+            if myHive then
+                Utils.Tween(myHive * CFrame.new(0,4,6), function() end)
+                task.wait(0.5)
+                ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
+                task.wait(1)
+                -- Đợi convert xong (đơn giản hóa)
+                while LocalPlayer.CoreStats.Pollen.Value > 0 and isFarming do task.wait(1) end
+                task.wait(2)
+                if LogFunc then LogFunc("✅ Convert xong -> Quay lại", Color3.fromRGB(0, 255, 0)) end
+                Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
+            end
+        end
+
+        -- 2. Tìm và ăn Token (Dùng TokenData)
+        local target = FindBestToken(fieldInfo, TokenData)
+        if target then
+            Humanoid:MoveTo(target.Position)
+        else
+            -- 3. Đi ngẫu nhiên nếu không có token xịn
+            local rx = math.random(-fieldInfo.Size.X/2 + 5, fieldInfo.Size.X/2 - 5)
+            local rz = math.random(-fieldInfo.Size.Z/2 + 5, fieldInfo.Size.Z/2 - 5)
+            Humanoid:MoveTo(Vector3.new(fieldInfo.Pos.X + rx, fieldInfo.Pos.Y, fieldInfo.Pos.Z + rz))
+            task.wait(0.5)
+        end
+    end
 end
 
 function module.StopFarm()
     isFarming = false
-    currentField = nil
 end
 
 return module
