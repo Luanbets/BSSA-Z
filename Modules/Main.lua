@@ -14,7 +14,7 @@ local function LoadModule(url)
 end
 
 -- === BASE URL ===
-local REPO = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/refs/heads/main/Modules/
+local REPO = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/"
 
 task.spawn(function()
     print("--- LOADING SYSTEM ---")
