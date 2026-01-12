@@ -1,111 +1,87 @@
 -- ====================================================
--- MASTER CONTROLLER - CEO
+-- BSSA-Z: MASTER CONTROLLER (ZERO TOUCH)
 -- ====================================================
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
 
--- BIẾN HỆ THỐNG
-local isRunning = true
-local currentPhaseScript = nil -- Script tiến trình đang chạy
+-- 1. SETUP UI NHỎ GỌN (CHỈ ĐỂ HIỂN THỊ TRẠNG THÁI)
+local uiName = "BSSA_Status"
+if CoreGui:FindFirstChild(uiName) then CoreGui[uiName]:Destroy() end
+local screen = Instance.new("ScreenGui", CoreGui); screen.Name = uiName
+local lbl = Instance.new("TextLabel", screen)
+lbl.Size = UDim2.new(0, 300, 0, 30); lbl.Position = UDim2.new(0.5, -150, 0.05, 0)
+lbl.BackgroundColor3 = Color3.fromRGB(0,0,0); lbl.TextColor3 = Color3.fromRGB(0,255,0)
+lbl.Text = "BSSA-Z: Initializing..."; lbl.BackgroundTransparency = 0.5
 
--- ====================================================
--- 1. LOAD WORKERS (CÔNG CỤ) - LOAD 1 LẦN DÙNG MÃI MÃI
--- ====================================================
-local function LoadWorker(url)
-    -- Thêm timestamp để tránh cache cũ
-    local finalUrl = url .. "?t=" .. tostring(tick())
-    local success, content = pcall(function() return game:HttpGet(finalUrl) end)
+local function Log(text) lbl.Text = "STATUS: " .. text end
+
+-- 2. HÀM LOAD MODULE (SỬ DỤNG LINK CỦA BẠN)
+local function LoadWorker(name)
+    local url = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/" .. name .. ".lua?t="..tick()
+    local success, content = pcall(function() return game:HttpGet(url) end)
     if success then
         local func = loadstring(content)
         if func then return func() end
     end
-    warn("❌ Failed to load worker: " .. url)
+    warn("❌ Failed to load: " .. name)
     return nil
 end
 
-print("🔄 Loading System Workers...")
-
--- Đóng gói tất cả Worker vào 1 cái hộp để đưa cho Script tiến trình dùng
+-- 3. TẢI TOÀN BỘ WORKER (TOOLKIT) - CHỈ TẢI 1 LẦN
+Log("Loading Toolkit...")
 local Toolkit = {
-    Utils       = LoadWorker("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/Utilities.lua"),
-    ShopUtils   = LoadWorker("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/ShopUtils.lua"),
-    FieldData   = LoadWorker("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/FieldData.lua"),
-    TokenData   = LoadWorker("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/TokenData.lua"),
-    AutoFarm    = LoadWorker("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/AutoFarm.lua"),
-    PlayerUtils = LoadWorker("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/PlayerUtils.lua"),
-    -- Các worker phụ như ClaimHive, RedeemCode có thể để Script tiến trình tự gọi hoặc load ở đây luôn
-    ClaimHive   = LoadWorker("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/ClaimHive.lua"),
-    RedeemCode  = LoadWorker("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/RedeemCode.lua")
+    Utils       = LoadWorker("Utilities"),
+    FieldData   = LoadWorker("FieldData"),
+    TokenData   = LoadWorker("TokenData"),
+    ShopUtils   = LoadWorker("ShopUtils"),
+    PlayerUtils = LoadWorker("PlayerUtils"),
+    AutoFarm    = LoadWorker("AutoFarm"),
+    ClaimHive   = LoadWorker("ClaimHive"),
+    RedeemCode  = LoadWorker("RedeemCode"),
+    -- Starter (Cotmoc1) tải sau để đảm bảo logic mới nhất
 }
 
--- Kiểm tra xem load đủ chưa
-if not Toolkit.AutoFarm or not Toolkit.ShopUtils then
-    warn("⚠️ CRITICAL ERROR: Thiếu Worker quan trọng! Dừng hệ thống.")
-    return
+if not Toolkit.AutoFarm or not Toolkit.FieldData then 
+    Log("❌ CRITICAL ERROR: Missing Modules")
+    return 
 end
 
-print("✅ Workers Loaded Successfully!")
-
--- ====================================================
--- 2. HÀM CHỌN TIẾN TRÌNH (PHASE SELECTOR)
--- ====================================================
-local function GetCurrentPhaseScript(beeCount)
-    -- LOGIC QUAN TRỌNG NHẤT Ở ĐÂY: CHIA GIAI ĐOẠN
-    
-    if beeCount < 5 then
-        return "Starter.lua", "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/Cotmoc1.lua" -- Tạm gọi Cotmoc1 là Starter
-        
-    elseif beeCount < 10 then
-        return "5BeeZone.lua", "Link_To_5BeeZone_Script" -- Bạn sẽ điền link sau
-        
-    elseif beeCount < 15 then
-        return "10BeeZone.lua", "Link_To_10BeeZone_Script"
-        
-    else
-        return "EndGame", nil
-    end
-end
-
--- ====================================================
--- 3. VÒNG LẶP ĐIỀU HÀNH (MAIN LOOP)
--- ====================================================
+-- 4. VÒNG LẶP CHÍNH (BRAIN LOOP)
 task.spawn(function()
-    while isRunning do
-        task.wait(1) -- Check mỗi giây
+    while true do
+        task.wait(1) -- Nhịp tim của hệ thống
         
-        -- A. Lấy số lượng ong hiện tại để biết đang ở đâu
-        -- (Sử dụng hàm từ AutoFarm hoặc PlayerUtils để đếm ong thật)
-        local myBees = Toolkit.AutoFarm.GetRealBeeCount() 
+        -- A. Kiểm tra số ong để chọn chiến thuật
+        local beeCount = Toolkit.AutoFarm.GetRealBeeCount() -- Sử dụng hàm đếm ong trong AutoFarm
         
-        -- B. Xác định ai sẽ làm Quản lý (Phase nào)
-        local phaseName, phaseLink = GetCurrentPhaseScript(myBees)
+        local CurrentStrategy = nil
         
-        if phaseLink then
-            -- Load Script Tiến Trình
-            local PhaseManager = LoadWorker(phaseLink)
-            
-            if PhaseManager and PhaseManager.Run then
-                print("🔹 Executing Phase: " .. phaseName .. " | Bees: " .. myBees)
-                
-                -- C. GIAO QUYỀN CHO QUẢN LÝ
-                -- Truyền bộ công cụ (Toolkit) cho quản lý dùng
-                -- Hàm Run() này sẽ thực hiện 1 lượt logic rồi trả lại quyền cho Main
-                local success, result = pcall(function()
-                    PhaseManager.Run(Toolkit) 
-                end)
-                
-                if not success then
-                    warn("⚠️ Error in " .. phaseName .. ": " .. tostring(result))
-                end
-                
-                -- Lưu ý: Script tiến trình (Starter.lua) không nên dùng vòng lặp while true wait() vĩnh viễn
-                -- Nó nên chạy xong 1 logic (check mua đồ -> chưa đủ -> farm 1 tí) rồi return để Main còn check lại số ong.
-            else
-                print("⚠️ Không tải được script: " .. phaseName)
+        if beeCount < 5 then
+            Log("Phase: Starter (Bees: "..beeCount..")")
+            -- Tải hoặc gọi Starter Script
+            if not Toolkit.Starter then 
+                Toolkit.Starter = LoadWorker("Cotmoc1") -- Đổi tên file Cotmoc1 thành Starter trên Github sau nhé
             end
+            CurrentStrategy = Toolkit.Starter
+            
+        elseif beeCount < 10 then
+            Log("Phase: 5 Bee Zone (Coming Soon)")
+            -- Sau này bạn thêm: Toolkit.Zone5 = LoadWorker("5BeeZone")
+            -- CurrentStrategy = Toolkit.Zone5
+             
         else
-            print("🎉 Đã đạt cấp độ cao nhất hoặc chưa có script cho giai đoạn này!")
-            -- Có thể chạy AutoFarm mặc định ở đây nếu muốn
+            Log("Phase: High Level")
+        end
+
+        -- B. Thực thi chiến thuật
+        if CurrentStrategy and CurrentStrategy.Run then
+            -- Truyền toàn bộ Toolkit vào để Starter sử dụng
+            local status, err = pcall(function()
+                CurrentStrategy.Run(Log, task.wait, Toolkit)
+            end)
+            
+            if not status then warn("Strategy Error: " .. tostring(err)) end
         end
     end
 end)
