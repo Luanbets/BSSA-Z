@@ -5,14 +5,47 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- Biến lưu dữ liệu
+-- Biến lưu dữ liệu Field (Vẫn tải từ ngoài để dễ update toạ độ)
 local FieldDataDB = nil
-local TokenPriorityDB = nil
 
 -- =========================================================
--- 1. HÀM TẢI DỮ LIỆU
+-- 1. DỮ LIỆU TOKEN (ĐÃ TÍCH HỢP TRỰC TIẾP VÀO ĐÂY)
 -- =========================================================
-local function LoadExternalModules(LogFunc)
+local TokenPriorityDB = {
+    -- === ITEMS (Priority: 100) - LỤM NGAY ===
+    ["rbxassetid://1471850677"] = {Priority = 100, Name = "Diamond Egg"},
+    ["rbxassetid://2319943273"] = {Priority = 100, Name = "Star Jelly"},
+    ["rbxassetid://2584584968"] = {Priority = 100, Name = "Oil"},
+    ["rbxassetid://1674871631"] = {Priority = 100, Name = "Ticket"},
+    ["rbxassetid://1471882621"] = {Priority = 100, Name = "Royal Jelly"},
+    ["rbxassetid://1952796032"] = {Priority = 100, Name = "Pineapple"},
+    ["rbxassetid://2028453802"] = {Priority = 100, Name = "Blueberry"},
+    ["rbxassetid://1952682401"] = {Priority = 100, Name = "Sunflower Seed"},
+    ["rbxassetid://2542899798"] = {Priority = 100, Name = "Glitter"},
+    ["rbxassetid://1952740625"] = {Priority = 100, Name = "Strawberry"},
+    ["rbxassetid://1471849394"] = {Priority = 100, Name = "Gold Egg"},
+
+    -- === TOKEN BUFF (Priority: 10) - LỤM SAU ===
+    ["rbxassetid://1442859163"] = {Priority = 10, Name = "Red Boost"},
+    ["rbxassetid://1442725244"] = {Priority = 10, Name = "Blue Boost"},
+    ["rbxassetid://177997841"]  = {Priority = 10, Name = "Bomb Token"},
+    ["rbxassetid://2499514197"] = {Priority = 10, Name = "Honey Mark"},
+    ["rbxassetid://65867881"]   = {Priority = 10, Name = "Haste"},
+    ["rbxassetid://253828517"]  = {Priority = 10, Name = "Melody"},
+    ["rbxassetid://1472256444"] = {Priority = 10, Name = "Baby Love"},
+    ["rbxassetid://1442863423"] = {Priority = 10, Name = "Blue Boost"},
+    ["rbxassetid://1629547638"] = {Priority = 10, Name = "Token Link"},
+    ["rbxassetid://2499540966"] = {Priority = 10, Name = "Pollen Mark"},
+    ["rbxassetid://1442764904"] = {Priority = 10, Name = "Buzz Bomb+"},
+    ["rbxassetid://2000457501"] = {Priority = 10, Name = "Star"},
+    ["rbxassetid://1629649299"] = {Priority = 10, Name = "Focus"},
+}
+
+-- =========================================================
+-- 2. HÀM TẢI DỮ LIỆU (CHỈ CÒN TẢI FIELD DATA)
+-- =========================================================
+local function LoadFieldData(LogFunc)
+    -- !!! LINK GITHUB CỦA BẠN !!!
     local repo = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/"
     
     local success1, content1 = pcall(function() return game:HttpGet(repo .. "FieldData.lua?t="..tick()) end)
@@ -20,19 +53,11 @@ local function LoadExternalModules(LogFunc)
         local func = loadstring(content1)
         if func then FieldDataDB = func() end
     end
-
-    local success2, content2 = pcall(function() return game:HttpGet(repo .. "TokenData.lua?t="..tick()) end)
-    if success2 then 
-        local func = loadstring(content2)
-        if func then 
-            local mod = func()
-            TokenPriorityDB = mod.Tokens
-        end 
-    end
+    -- TokenData đã có sẵn ở trên, không cần tải nữa!
 end
 
 -- =========================================================
--- 2. HÀM TÌM TỔ & HỖ TRỢ
+-- 3. HÀM TÌM TỔ & HỖ TRỢ
 -- =========================================================
 local function GetMyHivePos()
     local honeycombs = Workspace:FindFirstChild("Honeycombs") or Workspace:FindFirstChild("Hives")
@@ -64,7 +89,6 @@ local function IsBackpackFull()
     return false
 end
 
--- Lấy số phấn hiện tại
 local function GetCurrentPollen()
     if LocalPlayer.CoreStats and LocalPlayer.CoreStats:FindFirstChild("Pollen") then
         return LocalPlayer.CoreStats.Pollen.Value
@@ -83,7 +107,7 @@ end
 
 -- Tìm Token
 local function FindBestToken(fieldInfo)
-    if not TokenPriorityDB then return nil end
+    -- TokenPriorityDB ĐÃ CÓ SẴN, KHÔNG LO BỊ NIL
     local Character = LocalPlayer.Character
     if not Character or not Character:FindFirstChild("HumanoidRootPart") then return nil end
     local myPos = Character.HumanoidRootPart.Position
@@ -121,14 +145,14 @@ local function FindBestToken(fieldInfo)
 end
 
 -- =========================================================
--- 3. CHỨC NĂNG FARM CHÍNH
+-- 4. CHỨC NĂNG FARM CHÍNH
 -- =========================================================
 local isFarming = false
 
 function module.StartFarm(fieldName, LogFunc, Utils)
-    if not FieldDataDB or not TokenPriorityDB then
-        if LogFunc then LogFunc("Đang tải dữ liệu...", Color3.fromRGB(255, 255, 0)) end
-        LoadExternalModules(LogFunc)
+    if not FieldDataDB then
+        if LogFunc then LogFunc("Đang tải dữ liệu Field...", Color3.fromRGB(255, 255, 0)) end
+        LoadFieldData(LogFunc)
         task.wait(0.5)
     end
 
@@ -166,14 +190,13 @@ function module.StartFarm(fieldName, LogFunc, Utils)
             Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
         end
 
-        -- 1. LOGIC CONVERT THÔNG MINH (FIX V6)
+        -- 1. XỬ LÝ VỀ TỔ (CONVERT 100% & CHỜ 6S)
         if IsBackpackFull() then
             if LogFunc then LogFunc("🎒 Balo đầy! Về tổ...", Color3.fromRGB(255, 200, 0)) end
             
             local myHivePos = GetMyHivePos()
 
             if myHivePos then
-                -- Về tổ: Đứng cao hơn chút và lùi ra để dễ tương tác
                 Utils.Tween(myHivePos * CFrame.new(0, 4, 6), function() end)
                 task.wait(0.5)
 
@@ -185,28 +208,23 @@ function module.StartFarm(fieldName, LogFunc, Utils)
                 local stuckTime = 0
                 local timeout = 0
                 
-                -- VÒNG LẶP KIỂM TRA (KHÔNG SPAM NÚT NỮA)
                 while GetCurrentPollen() > 10 and isFarming do
                     task.wait(1)
                     timeout = timeout + 1
-                    if timeout > 300 then break end -- Tự thoát sau 5 phút đề phòng kẹt vĩnh viễn
+                    if timeout > 300 then break end
                     
                     local currPollen = GetCurrentPollen()
                     
-                    -- Nếu phấn KHÔNG GIẢM (đứng yên hoặc tăng)
                     if currPollen >= prevPollen then
                         stuckTime = stuckTime + 1
-                        -- Nếu đứng yên quá 5 giây -> Có thể chưa bật hoặc bị tắt -> BẤM LẠI
                         if stuckTime >= 5 then
                             if LogFunc then LogFunc("⚠️ Kẹt convert -> Thử bật lại...", Color3.fromRGB(255, 150, 0)) end
                             ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
-                            stuckTime = 0 -- Reset bộ đếm
+                            stuckTime = 0 
                         end
                     else
-                        -- Nếu phấn ĐANG GIẢM -> Đang tốt, reset bộ đếm kẹt
                         stuckTime = 0
                     end
-                    
                     prevPollen = currPollen
                 end
                 
