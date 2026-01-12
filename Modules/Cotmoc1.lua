@@ -1,101 +1,124 @@
 local module = {}
 
-function module.Run(LogFunc, WaitFunc, Utils)
+-- Tọa độ Shop (Giữ nguyên như của bạn)
+local SHOPS = {
+    Egg  = CFrame.new(-140.41, 4.69, 243.97),
+    Tool = CFrame.new(84.88, 4.51, 290.49)
+}
+
+function module.Run(Toolkit)
+    -- 1. BUNG TOOLKIT (Lấy đồ nghề từ Main)
+    local Utils = Toolkit.Utils
+    local ShopUtils = Toolkit.ShopUtils
+    local AutoFarm = Toolkit.AutoFarm
+    local PlayerUtils = Toolkit.PlayerUtils
+    local RedeemCode = Toolkit.RedeemCode -- Lấy worker nhập code
+    
+    local LocalPlayer = game:GetService("Players").LocalPlayer
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    
-    -- LOAD SHOP UTILS (CÓ CHỐNG CACHE)
-    local shopUtilsUrl = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/ShopUtils.lua?t=" .. tostring(tick())
-    
-    LogFunc("Loading ShopUtils...", Color3.fromRGB(255, 255, 255))
-    local success, content = pcall(function() return game:HttpGet(shopUtilsUrl) end)
-    local ShopUtils = nil
-    
-    if success then
-        local loadFunc = loadstring(content)
-        if loadFunc then
-            ShopUtils = loadFunc()
+
+    -- 2. HÀM HỖ TRỢ: MUA ITEM (Tự bay đến shop và mua)
+    local function GoBuy(shopType, category, itemType, logText)
+        -- Dừng Farm
+        if AutoFarm.Stop then AutoFarm.Stop() end
+        task.wait(0.5)
+
+        -- Bay đến Shop
+        local pos = (shopType == "Egg") and SHOPS.Egg or SHOPS.Tool
+        Utils.Tween(pos)
+        task.wait(1)
+
+        -- Mua
+        print("🛒 Đang mua: " .. logText)
+        game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {
+            ["Type"] = itemType, 
+            ["Category"] = category,
+            ["Amount"] = 1
+        })
+        task.wait(1.5)
+    end
+
+    -- ==========================================================
+    -- BƯỚC 0: NHẬP CODE (Ưu tiên số 1 - Chạy xong mới làm việc khác)
+    -- ==========================================================
+    local data = Utils.LoadData()
+    if not data.RedeemDone then
+        print("🎫 Bắt đầu nhập Code tân thủ...")
+        if RedeemCode then 
+            RedeemCode.Run(print, task.wait, Utils) -- Chạy worker nhập code
+        end
+        -- Sau khi nhập xong, return để Main refresh lại tiền nong
+        return 
+    end
+
+    -- ==========================================================
+    -- BƯỚC 1: MUA TRỨNG (Mục tiêu: Có 2 con ong)
+    -- ==========================================================
+    local currentBees = AutoFarm.GetRealBeeCount()
+    if currentBees < 2 then
+        print("🥚 Mục tiêu: Mua trứng (Hiện có: " .. currentBees .. "/2)")
+        
+        -- Check tiền (Giá trứng Basic là 1000 hoặc tùy server, mình check dư ra tí cho chắc)
+        local price = 1000 
+        local myHoney = PlayerUtils.GetHoney()
+
+        if myHoney >= price then
+            GoBuy("Egg", "Eggs", "Basic", "Basic Egg")
+            return -- Mua xong return để Main check lại số ong
         else
-            LogFunc("⚠️ ShopUtils Error: Bad Code", Color3.fromRGB(255, 80, 80))
+            print("📉 Thiếu tiền mua trứng ("..myHoney.."/"..price.."). Đi cày...")
+            -- Gọi AutoFarm
+            Toolkit.AutoFarm.StartFarm("Sunflower Field", Utils, Toolkit.FieldData, Toolkit.TokenData)
+            return
         end
-    else
-        LogFunc("⚠️ ShopUtils Error: Download Fail", Color3.fromRGB(255, 80, 80))
     end
 
-    -- Tọa độ
-    local EggShopPos = CFrame.new(-140.41, 4.69, 243.97)
-    local ToolShopPos = CFrame.new(84.88, 4.51, 290.49)
-
-    -- Data Check
-    local currentData = Utils.LoadData() 
-    local daMua = currentData.Cotmoc1_Progress or 0 
+    -- ==========================================================
+    -- BƯỚC 2: MUA DỤNG CỤ (Theo thứ tự: Backpack -> Rake)
+    -- ==========================================================
     
-    if daMua >= 4 or currentData.Cotmoc1Done then
-        LogFunc("Cotmoc1: Completed!", Color3.fromRGB(0, 255, 0))
-        if not currentData.Cotmoc1Done then Utils.SaveData("Cotmoc1Done", true) end
-        return
-    end
+    -- Danh sách việc cần làm tiếp theo (Đúng thứ tự bạn yêu cầu)
+    local ItemsToBuy = {
+        {Name = "Backpack", Category = "Accessory", Price = 5500}, -- Cần chỉnh lại giá nếu sai
+        {Name = "Rake",     Category = "Collector", Price = 800}   -- Cần chỉnh lại giá nếu sai
+    }
 
-    -- 1. TRỨNG
-    if daMua < 2 then
-        LogFunc("Moving to Egg Shop...", Color3.fromRGB(255, 220, 0)) 
-        Utils.Tween(EggShopPos, WaitFunc)
-        task.wait(1)
-        for i = (daMua + 1), 2 do
-            WaitFunc()
-            game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Basic", ["Amount"]=1, ["Category"]="Eggs"})
-            Utils.SaveData("Cotmoc1_Progress", i); daMua = i 
-            LogFunc("Bought Egg " .. i .. "/2", Color3.fromRGB(200, 200, 200))
-            task.wait(1)
-        end
-    end
-
-    -- 2. DỤNG CỤ
-    if daMua < 4 then
-        LogFunc("Moving to Tool Shop...", Color3.fromRGB(255, 220, 0))
-        Utils.Tween(ToolShopPos, WaitFunc)
-        task.wait(1)
-
-        -- Backpack (Step 3)
-        if daMua < 3 then
-            WaitFunc()
-            local canBuy = true
-            if ShopUtils then canBuy = ShopUtils.CheckBuy("Backpack", LogFunc) end
+    for _, item in ipairs(ItemsToBuy) do
+        -- Kiểm tra đã có món này chưa
+        local hasItem = PlayerUtils.GetItemAmount(item.Name) > 0 or data["Has_"..item.Name]
+        
+        -- Nếu chưa có -> Đây là mục tiêu hiện tại
+        if not hasItem then
+            print("🎯 Mục tiêu hiện tại: " .. item.Name)
+            
+            -- Dùng ShopUtils để check tiền chuẩn xác (nó check cả nguyên liệu nếu cần)
+            local canBuy = ShopUtils.CheckBuy(item.Name, print)
             
             if canBuy then
-                LogFunc("Buying Backpack...", Color3.fromRGB(255, 255, 255))
-                game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Backpack", ["Category"]="Accessory"})
-                Utils.SaveData("Cotmoc1_Progress", 3); daMua = 3
-                LogFunc("✅ Bought Backpack", Color3.fromRGB(0, 255, 0))
+                -- ĐỦ TIỀN -> ĐI MUA
+                GoBuy("Tool", item.Category, item.Name, item.Name)
+                Utils.SaveData("Has_"..item.Name, true) -- Lưu lại là đã mua
+                return
             else
-                LogFunc("⏸️ Skip Backpack (Honey/Mat)", Color3.fromRGB(255, 150, 0))
+                -- THIẾU TIỀN -> ĐI FARM
+                print("🌾 Chưa đủ tiền mua " .. item.Name .. ". Đang Auto Farm...")
+                
+                -- Tìm bãi farm tốt nhất (Logic cũ: Sunflower cho dễ)
+                Toolkit.AutoFarm.StartFarm("Sunflower Field", Utils, Toolkit.FieldData, Toolkit.TokenData)
+                return
             end
-            task.wait(1)
-        end
-
-        -- Rake (Step 4)
-        if daMua == 3 then
-            WaitFunc()
-            local canBuy = true
-            if ShopUtils then canBuy = ShopUtils.CheckBuy("Rake", LogFunc) end
-            
-            if canBuy then
-                LogFunc("Buying Rake...", Color3.fromRGB(255, 255, 255))
-                game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Rake", ["Category"]="Collector"})
-                Utils.SaveData("Cotmoc1_Progress", 4); daMua = 4
-                LogFunc("✅ Bought Rake", Color3.fromRGB(0, 255, 0))
-            else
-                LogFunc("⏸️ Skip Rake (Honey/Mat)", Color3.fromRGB(255, 150, 0))
-            end
-            task.wait(1)
         end
     end
 
-    if daMua >= 4 then
-        LogFunc("🎉 Cotmoc1 Full Done!", Color3.fromRGB(0, 255, 0))
-        Utils.SaveData("Cotmoc1Done", true)
-    else
-        LogFunc("⏳ Cotmoc1 Paused at step " .. daMua, Color3.fromRGB(255, 200, 100))
-    end
+    -- ==========================================================
+    -- HOÀN THÀNH COTMOC1
+    -- ==========================================================
+    -- Nếu chạy xuống tới đây nghĩa là: Đã nhập code, đủ 2 ong, có Backpack, có Rake.
+    print("🎉 Đã hoàn thành Cột Mốc 1 (Starter)!")
+    Utils.SaveData("Cotmoc1Done", true)
+    
+    -- Lúc này Main.lua sẽ thấy bee >= 2 (hoặc điều kiện khác) để chuyển script
+    -- Nhưng nếu Main yêu cầu 5 ong mới qua zone mới, bạn có thể thêm logic mua trứng tiếp ở đây.
 end
 
 return module
