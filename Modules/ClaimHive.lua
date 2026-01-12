@@ -2,41 +2,49 @@ local module = {}
 
 function module.Run(LogFunc, WaitFunc, Utils)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local StarterGui = game:GetService("StarterGui")
-
-    local function GetSpawnPosCFrame(spawnObj)
-        if not spawnObj then return nil end
-        if spawnObj:IsA("CFrameValue") then return spawnObj.Value
-        elseif spawnObj:IsA("BasePart") then return spawnObj.CFrame
-        else return nil end
-    end
-
+    local LocalPlayer = game:GetService("Players").LocalPlayer
     local honeycombs = workspace:FindFirstChild("Honeycombs") or workspace:FindFirstChild("Hives")
+
     if not honeycombs then return false end
 
+    -- 1. KIỂM TRA XEM ĐÃ CÓ TỔ CHƯA (QUAN TRỌNG)
     for _, hive in pairs(honeycombs:GetChildren()) do
-        WaitFunc()
-        if hive:FindFirstChild("Owner") and (hive.Owner.Value == "" or hive.Owner.Value == nil) then
+        if hive:FindFirstChild("Owner") and hive.Owner.Value == LocalPlayer then
+            -- Đã có tổ rồi!
+            return true 
+        end
+    end
+
+    -- 2. NẾU CHƯA CÓ -> ĐI TÌM TỔ TRỐNG
+    LogFunc("Searching for empty hive...")
+    
+    for _, hive in pairs(honeycombs:GetChildren()) do
+        if hive:FindFirstChild("Owner") and (hive.Owner.Value == nil or hive.Owner.Value == "") then
             local hiveID = hive.HiveID.Value
-            local targetCF = GetSpawnPosCFrame(hive.SpawnPos)
-            if targetCF then
-                LogFunc("Claiming Hive " .. hiveID .. "...", Color3.fromRGB(255, 220, 0))
+            local spawnPos = hive:FindFirstChild("SpawnPos")
+            
+            if spawnPos then
+                local pos = spawnPos.Value -- CFrameValue
                 
-                Utils.Tween(targetCF, WaitFunc)
+                -- Bay tới tổ
+                LogFunc("Claiming Hive " .. hiveID .. "...")
+                Utils.Tween(pos)
+                task.wait(1)
                 
-                task.wait(1.5)
-                WaitFunc()
+                -- Gửi lệnh nhận
                 ReplicatedStorage.Events.ClaimHive:FireServer(hiveID)
                 task.wait(1)
                 
-                LogFunc("Hive Claimed", Color3.fromRGB(0, 255, 0))
-                StarterGui:SetCore("SendNotification", {Title="System", Text="Hive Claimed", Duration=3})
-                return true
+                -- Check lại xem nhận được chưa
+                if hive.Owner.Value == LocalPlayer then
+                    LogFunc("✅ Hive Claimed!")
+                    return true
+                end
             end
         end
     end
 
-    LogFunc("No Empty Hive", Color3.fromRGB(255, 80, 80))
+    LogFunc("❌ No Hive Available!")
     return false
 end
 
