@@ -13,7 +13,6 @@ local TokenPriorityDB = nil
 -- 1. HÀM TẢI DỮ LIỆU
 -- =========================================================
 local function LoadExternalModules(LogFunc)
-    -- !!! LINK GITHUB CỦA BẠN !!!
     local repo = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/"
     
     local success1, content1 = pcall(function() return game:HttpGet(repo .. "FieldData.lua?t="..tick()) end)
@@ -65,7 +64,7 @@ local function IsBackpackFull()
     return false
 end
 
--- Hàm lấy số phấn hiện tại (để kiểm tra đã sạch chưa)
+-- Lấy số phấn hiện tại
 local function GetCurrentPollen()
     if LocalPlayer.CoreStats and LocalPlayer.CoreStats:FindFirstChild("Pollen") then
         return LocalPlayer.CoreStats.Pollen.Value
@@ -167,36 +166,57 @@ function module.StartFarm(fieldName, LogFunc, Utils)
             Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
         end
 
-        -- 1. XỬ LÝ VỀ TỔ (CONVERT 100%)
+        -- 1. LOGIC CONVERT THÔNG MINH (FIX V6)
         if IsBackpackFull() then
             if LogFunc then LogFunc("🎒 Balo đầy! Về tổ...", Color3.fromRGB(255, 200, 0)) end
             
             local myHivePos = GetMyHivePos()
 
             if myHivePos then
-                -- Bay về tổ
+                -- Về tổ: Đứng cao hơn chút và lùi ra để dễ tương tác
                 Utils.Tween(myHivePos * CFrame.new(0, 4, 6), function() end)
+                task.wait(0.5)
+
+                -- Bấm nút convert lần đầu
+                ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
+                task.wait(1)
+
+                local prevPollen = GetCurrentPollen()
+                local stuckTime = 0
+                local timeout = 0
                 
-                local convertTimeout = 0
-                -- VÒNG LẶP: Chạy cho đến khi PHẤN = 0 (Sạch balo)
-                repeat
-                    ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
-                    task.wait(2) -- Mỗi 2 giây bấm nút 1 lần
+                -- VÒNG LẶP KIỂM TRA (KHÔNG SPAM NÚT NỮA)
+                while GetCurrentPollen() > 10 and isFarming do
+                    task.wait(1)
+                    timeout = timeout + 1
+                    if timeout > 300 then break end -- Tự thoát sau 5 phút đề phòng kẹt vĩnh viễn
                     
-                    convertTimeout = convertTimeout + 1
-                    if convertTimeout > 60 then break end -- Timeout 120s
+                    local currPollen = GetCurrentPollen()
                     
-                -- Điều kiện thoát: Phấn < 10 (Gần như bằng 0) HOẶC tắt farm
-                until GetCurrentPollen() < 10 or not isFarming
+                    -- Nếu phấn KHÔNG GIẢM (đứng yên hoặc tăng)
+                    if currPollen >= prevPollen then
+                        stuckTime = stuckTime + 1
+                        -- Nếu đứng yên quá 5 giây -> Có thể chưa bật hoặc bị tắt -> BẤM LẠI
+                        if stuckTime >= 5 then
+                            if LogFunc then LogFunc("⚠️ Kẹt convert -> Thử bật lại...", Color3.fromRGB(255, 150, 0)) end
+                            ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
+                            stuckTime = 0 -- Reset bộ đếm
+                        end
+                    else
+                        -- Nếu phấn ĐANG GIẢM -> Đang tốt, reset bộ đếm kẹt
+                        stuckTime = 0
+                    end
+                    
+                    prevPollen = currPollen
+                end
                 
-                -- YÊU CẦU CỦA BẠN: ĐỢI THÊM 6 GIÂY CHO CHẮC
                 if LogFunc then LogFunc("⏳ Đợi thêm 6s cho chắc...", Color3.fromRGB(255, 255, 255)) end
                 task.wait(6)
                 
-                if LogFunc then LogFunc("✅ Convert sạch sẽ! Đi farm...", Color3.fromRGB(0, 255, 0)) end
+                if LogFunc then LogFunc("✅ Sạch balo! Đi farm...", Color3.fromRGB(0, 255, 0)) end
                 Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
             else
-                if LogFunc then LogFunc("⚠️ Không tìm thấy tổ!", Color3.fromRGB(255, 0, 0)) end
+                if LogFunc then LogFunc("⚠️ Lỗi tìm tổ!", Color3.fromRGB(255, 0, 0)) end
                 task.wait(2)
             end
         end
