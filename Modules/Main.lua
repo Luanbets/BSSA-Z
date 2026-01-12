@@ -1,22 +1,21 @@
 -- ====================================================
--- BSSA-Z: MASTER CONTROLLER (ZERO TOUCH)
+-- BSSA-Z: MASTER CONTROLLER (FIXED FLOW)
 -- ====================================================
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 
--- 1. SETUP UI NHỎ GỌN (CHỈ ĐỂ HIỂN THỊ TRẠNG THÁI)
+-- SETUP UI STATUS
 local uiName = "BSSA_Status"
 if CoreGui:FindFirstChild(uiName) then CoreGui[uiName]:Destroy() end
 local screen = Instance.new("ScreenGui", CoreGui); screen.Name = uiName
 local lbl = Instance.new("TextLabel", screen)
 lbl.Size = UDim2.new(0, 300, 0, 30); lbl.Position = UDim2.new(0.5, -150, 0.05, 0)
 lbl.BackgroundColor3 = Color3.fromRGB(0,0,0); lbl.TextColor3 = Color3.fromRGB(0,255,0)
-lbl.Text = "BSSA-Z: Initializing..."; lbl.BackgroundTransparency = 0.5
+lbl.BackgroundTransparency = 0.5; lbl.Text = "Loading..."
 
 local function Log(text) lbl.Text = "STATUS: " .. text end
 
--- 2. HÀM LOAD MODULE (SỬ DỤNG LINK CỦA BẠN)
+-- LOAD WORKER
 local function LoadWorker(name)
     local url = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/" .. name .. ".lua?t="..tick()
     local success, content = pcall(function() return game:HttpGet(url) end)
@@ -24,11 +23,9 @@ local function LoadWorker(name)
         local func = loadstring(content)
         if func then return func() end
     end
-    warn("❌ Failed to load: " .. name)
     return nil
 end
 
--- 3. TẢI TOÀN BỘ WORKER (TOOLKIT) - CHỈ TẢI 1 LẦN
 Log("Loading Toolkit...")
 local Toolkit = {
     Utils       = LoadWorker("Utilities"),
@@ -39,49 +36,52 @@ local Toolkit = {
     AutoFarm    = LoadWorker("AutoFarm"),
     ClaimHive   = LoadWorker("ClaimHive"),
     RedeemCode  = LoadWorker("RedeemCode"),
-    -- Starter (Cotmoc1) tải sau để đảm bảo logic mới nhất
 }
 
-if not Toolkit.AutoFarm or not Toolkit.FieldData then 
-    Log("❌ CRITICAL ERROR: Missing Modules")
-    return 
+if not Toolkit.AutoFarm or not Toolkit.ClaimHive then return end
+
+-- ====================================================
+-- BƯỚC 1: XỬ LÝ CLAIM HIVE (CHẶN CỔNG)
+-- Chạy 1 lần duy nhất ở đây. Chưa có tổ thì không cho đi tiếp.
+-- ====================================================
+Log("Checking Hive...")
+local hasHive = Toolkit.ClaimHive.Run(Log, task.wait, Toolkit.Utils)
+
+if not hasHive then
+    Log("❌ Failed to claim hive. Script Stopped.")
+    return -- Dừng script luôn nếu không nhận được tổ
 end
 
--- 4. VÒNG LẶP CHÍNH (BRAIN LOOP)
+Log("✅ Hive Owned! Starting Brain Loop...")
+
+-- ====================================================
+-- BƯỚC 2: VÒNG LẶP CHÍNH (BRAIN LOOP)
+-- Lúc này đã chắc chắn có tổ, Starter không cần lo việc này nữa
+-- ====================================================
 task.spawn(function()
     while true do
-        task.wait(1) -- Nhịp tim của hệ thống
+        task.wait(1)
         
-        -- A. Kiểm tra số ong để chọn chiến thuật
-        local beeCount = Toolkit.AutoFarm.GetRealBeeCount() -- Sử dụng hàm đếm ong trong AutoFarm
-        
+        local beeCount = Toolkit.AutoFarm.GetRealBeeCount()
         local CurrentStrategy = nil
         
         if beeCount < 5 then
-            Log("Phase: Starter (Bees: "..beeCount..")")
-            -- Tải hoặc gọi Starter Script
+            -- Gọi Starter (Cotmoc1)
             if not Toolkit.Starter then 
-                Toolkit.Starter = LoadWorker("Cotmoc1") -- Đổi tên file Cotmoc1 thành Starter trên Github sau nhé
+                Toolkit.Starter = LoadWorker("Cotmoc1") -- Nhớ đổi tên Cotmoc1 -> Starter trên Github sau
             end
             CurrentStrategy = Toolkit.Starter
             
         elseif beeCount < 10 then
             Log("Phase: 5 Bee Zone (Coming Soon)")
-            -- Sau này bạn thêm: Toolkit.Zone5 = LoadWorker("5BeeZone")
-            -- CurrentStrategy = Toolkit.Zone5
-             
         else
             Log("Phase: High Level")
         end
 
-        -- B. Thực thi chiến thuật
         if CurrentStrategy and CurrentStrategy.Run then
-            -- Truyền toàn bộ Toolkit vào để Starter sử dụng
-            local status, err = pcall(function()
+            pcall(function()
                 CurrentStrategy.Run(Log, task.wait, Toolkit)
             end)
-            
-            if not status then warn("Strategy Error: " .. tostring(err)) end
         end
     end
 end)
