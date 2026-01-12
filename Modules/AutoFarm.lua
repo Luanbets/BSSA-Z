@@ -1,13 +1,17 @@
 local module = {}
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
 -- Biến lưu dữ liệu
 local FieldDataDB = nil
 local TokenPriorityDB = nil
 
--- Hàm load dữ liệu từ GitHub
+-- =========================================================
+-- 1. HÀM TẢI DỮ LIỆU (GIỮ NGUYÊN)
+-- =========================================================
 local function LoadExternalModules(LogFunc)
     -- !!! LINK GITHUB CỦA BẠN !!!
     local repo = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/"
@@ -28,12 +32,13 @@ local function LoadExternalModules(LogFunc)
     end
 end
 
--- Hàm hỗ trợ: Lấy ID từ Texture
+-- =========================================================
+-- 2. HÀM HỖ TRỢ
+-- =========================================================
 local function GetIDFromTexture(texture)
     return tostring(string.match(texture, "%d+$"))
 end
 
--- Hàm hỗ trợ: Kiểm tra balo đầy
 local function IsBackpackFull()
     if LocalPlayer.CoreStats and LocalPlayer.CoreStats:FindFirstChild("Pollen") and LocalPlayer.CoreStats:FindFirstChild("Capacity") then
         return LocalPlayer.CoreStats.Pollen.Value >= LocalPlayer.CoreStats.Capacity.Value
@@ -41,7 +46,6 @@ local function IsBackpackFull()
     return false
 end
 
--- Hàm hỗ trợ: Kiểm tra điểm trong Field (Bỏ qua trục Y để chính xác hơn)
 local function IsPointInField(point, fieldInfo)
     if not fieldInfo or not fieldInfo.Pos or not fieldInfo.Size then return false end
     local halfX = fieldInfo.Size.X / 2
@@ -51,12 +55,7 @@ local function IsPointInField(point, fieldInfo)
     return (dx <= halfX and dz <= halfZ)
 end
 
--- Hàm tính khoảng cách ngang (Bỏ qua chiều cao Y) -> Fix lỗi đứng chờ
-local function GetHorizontalDistance(p1, p2)
-    return (Vector3.new(p1.X, 0, p1.Z) - Vector3.new(p2.X, 0, p2.Z)).Magnitude
-end
-
--- Logic Tìm Token
+-- Hàm tìm Token tốt nhất (Tối ưu hóa tốc độ)
 local function FindBestToken(fieldInfo)
     if not TokenPriorityDB then return nil end
     local Character = LocalPlayer.Character
@@ -70,6 +69,7 @@ local function FindBestToken(fieldInfo)
     local collectibles = Workspace:FindFirstChild("Collectibles")
     if collectibles then
         for _, token in pairs(collectibles:GetChildren()) do
+            -- Chỉ lấy token chưa bị nhặt (Transparency = 0)
             if token.Transparency == 0 and token:FindFirstChild("FrontDecal") then
                 local texID = "rbxassetid://" .. GetIDFromTexture(token.FrontDecal.Texture)
                 local tokenData = TokenPriorityDB[texID]
@@ -95,7 +95,9 @@ local function FindBestToken(fieldInfo)
     return bestToken
 end
 
--- CHỨC NĂNG FARM
+-- =========================================================
+-- 3. CHỨC NĂNG FARM CHÍNH
+-- =========================================================
 local isFarming = false
 
 function module.StartFarm(fieldName, LogFunc, Utils)
@@ -114,20 +116,16 @@ function module.StartFarm(fieldName, LogFunc, Utils)
     isFarming = true
     if LogFunc then LogFunc("🚜 Bắt đầu Farm: " .. fieldName, Color3.fromRGB(0, 255, 0)) end
 
-    -- ======================================================
-    -- FIX 1: AUTO DIG BẰNG CÁCH KÍCH HOẠT TOOL TRỰC TIẾP
-    -- ======================================================
+    -- =========================================================
+    -- FIX 1: DÙNG REMOTE EVENT THẬT ĐỂ ĐÀO (KHÔNG DÙNG TOOL:ACTIVATE)
+    -- =========================================================
     task.spawn(function()
         while isFarming do
-            local char = LocalPlayer.Character
-            if char then
-                -- Tìm công cụ (Tool) đang cầm trên tay
-                local tool = char:FindFirstChildOfClass("Tool")
-                if tool then
-                    tool:Activate() -- Kích hoạt tool (Click thật)
-                end
-            end
-            task.wait(0.1) -- Tốc độ click (0.1s/lần)
+            pcall(function()
+                -- Đây là Remote Event chính xác để thu phấn trong BSS
+                ReplicatedStorage.Events.ToolCollect:FireServer()
+            end)
+            task.wait(0.2) -- Tốc độ đào (đừng chỉnh thấp quá kẻo bị kick)
         end
     end)
 
@@ -135,11 +133,14 @@ function module.StartFarm(fieldName, LogFunc, Utils)
     local Humanoid = Character:WaitForChild("Humanoid")
     local RootPart = Character:WaitForChild("HumanoidRootPart")
 
+    -- Đến Field
     Utils.Tween(CFrame.new(fieldInfo.Pos + Vector3.new(0, 5, 0)), function() end)
 
     while isFarming do
-        task.wait()
+        -- Dùng RunService để mượt hơn, không dùng task.wait() ở vòng lặp chính
+        RunService.Heartbeat:Wait()
         
+        -- Cập nhật nhân vật
         if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             LocalPlayer.CharacterAdded:Wait()
             Character = LocalPlayer.Character
@@ -166,7 +167,7 @@ function module.StartFarm(fieldName, LogFunc, Utils)
             if myHivePos then
                 Utils.Tween(myHivePos * CFrame.new(0, 0, 3), function() end)
                 repeat
-                    game:GetService("ReplicatedStorage").Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
+                    ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
                     task.wait(2)
                 until not IsBackpackFull() or not isFarming
                 
@@ -175,40 +176,41 @@ function module.StartFarm(fieldName, LogFunc, Utils)
             end
         end
 
-        -- 2. Nhặt Token
+        -- 2. Nhặt Token (FIX DI CHUYỂN)
         local targetToken = FindBestToken(fieldInfo)
         
         if targetToken then
+            -- Liên tục di chuyển tới token
             Humanoid:MoveTo(targetToken.Position)
-            local timeout = 0
             
-            -- ======================================================
-            -- FIX 2: LOGIC DI CHUYỂN MƯỢT HƠN
-            -- ======================================================
-            while targetToken and targetToken.Parent and targetToken.Transparency == 0 and timeout < 20 do
-                -- Tính khoảng cách ngang (bỏ qua trục Y)
-                local dist = GetHorizontalDistance(RootPart.Position, targetToken.Position)
+            local stuckCount = 0
+            -- Vòng lặp chờ nhặt: Chỉ thoát khi token BIẾN MẤT (đã nhặt được) hoặc timeout
+            while targetToken and targetToken.Parent and targetToken.Transparency == 0 do
+                -- Vẫn cứ MoveTo để đảm bảo nhân vật không dừng lại giữa chừng
+                Humanoid:MoveTo(targetToken.Position)
                 
-                -- Tăng phạm vi nhận diện lên 6 studs để "lướt qua" là tính xong ngay
-                if dist < 6 then 
-                    break -- Đã tới đủ gần, thoát vòng lặp ngay lập tức để tìm cái khác
-                end
+                -- Check nếu đi ra ngoài Field thì break
+                if not IsPointInField(RootPart.Position, fieldInfo) then break end
                 
-                task.wait(0.1)
-                timeout = timeout + 1
+                stuckCount = stuckCount + 1
+                if stuckCount > 60 then break end -- Timeout khoảng 2 giây nếu kẹt
+                RunService.Heartbeat:Wait()
             end
         else
-            -- 3. Farm ngẫu nhiên
+            -- 3. Farm ngẫu nhiên (Đi liên tục không dừng)
             local rx = math.random(-fieldInfo.Size.X/2 + 5, fieldInfo.Size.X/2 - 5)
             local rz = math.random(-fieldInfo.Size.Z/2 + 5, fieldInfo.Size.Z/2 - 5)
             local dest = Vector3.new(fieldInfo.Pos.X + rx, fieldInfo.Pos.Y, fieldInfo.Pos.Z + rz)
             
             Humanoid:MoveTo(dest)
             local walkTime = 0
-            while (RootPart.Position - dest).Magnitude > 6 and walkTime < 20 do
-                task.wait(0.1)
-                walkTime = walkTime + 1
+            
+            while (RootPart.Position - dest).Magnitude > 4 and walkTime < 30 do
+                -- Nếu thấy token ngon xuất hiện -> Bỏ đi bộ, chạy qua nhặt ngay
                 if FindBestToken(fieldInfo) then break end
+                
+                walkTime = walkTime + 1
+                RunService.Heartbeat:Wait()
             end
         end
     end
