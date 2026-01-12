@@ -1,5 +1,5 @@
 -- ====================================================
--- AUTO CLAIM HIVE V13.6 (ANTI-CACHE & FIXED)
+-- AUTO CLAIM HIVE V13.7 (TEST FARM ADDED)
 -- Created for: Luận
 -- ====================================================
 local CoreGui = game:GetService("CoreGui")
@@ -12,9 +12,9 @@ local TweenService = game:GetService("TweenService")
 local isPaused = false
 
 -- ====================================================
--- UI SETUP (GIỮ NGUYÊN NHƯ CŨ)
+-- UI SETUP (GIỮ NGUYÊN)
 -- ====================================================
-local uiName = "AutoHiveV13_FinalFix"
+local uiName = "AutoHiveV13_TestVer"
 if CoreGui:FindFirstChild(uiName) then CoreGui[uiName]:Destroy() end
 
 local screenGui = Instance.new("ScreenGui")
@@ -36,7 +36,7 @@ topBar.Size = UDim2.new(1, 0, 0, 30); topBar.BackgroundColor3 = Color3.fromRGB(3
 Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 12)
 local titleLbl = Instance.new("TextLabel", topBar)
 titleLbl.Size = UDim2.new(1, -40, 1, 0); titleLbl.Position = UDim2.new(0, 10, 0, 0); titleLbl.BackgroundTransparency = 1
-titleLbl.Text = "BSSA-Z: ANTI-CACHE VER"; titleLbl.TextColor3 = Color3.fromRGB(255, 200, 0); titleLbl.Font = Enum.Font.GothamBold; titleLbl.TextSize = 14; titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.Text = "BSSA-Z: TEST FARM MODE"; titleLbl.TextColor3 = Color3.fromRGB(255, 200, 0); titleLbl.Font = Enum.Font.GothamBold; titleLbl.TextSize = 14; titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 
 -- Log Area
 local contentFrame = Instance.new("Frame", mainFrame)
@@ -59,18 +59,19 @@ minBtn.MouseButton1Click:Connect(function() mainFrame.Visible=false; openBtn.Vis
 openBtn.MouseButton1Click:Connect(function() mainFrame.Visible=true; openBtn.Visible=false end)
 pauseBtn.MouseButton1Click:Connect(function() isPaused = not isPaused; pauseBtn.Text = isPaused and "PAUSED" or "RUNNING"; pauseBtn.TextColor3 = isPaused and Color3.fromRGB(255,80,80) or Color3.fromRGB(0,255,100) end)
 
+-- HÀM LOG (ĐÃ TẮT PRINT F9 THEO YÊU CẦU)
 local function Log(text, color)
     lblAction.Text = "> " .. text
     lblAction.TextColor3 = color or Color3.fromRGB(255, 255, 255)
-    print("[AutoHive] " .. text)
+    -- print("[AutoHive] " .. text) -- Đã tắt
 end
+
 local function WaitIfPaused() while isPaused do task.wait(0.5) end end
 
 -- ====================================================
--- LOGIC TẢI THÔNG MINH (CHỐNG CACHE)
+-- LOGIC TẢI THÔNG MINH
 -- ====================================================
 local function LoadModule(url)
-    -- Thêm ?t=tick() để bắt buộc tải file mới nhất, không dùng file cũ
     local noCacheUrl = url .. "?t=" .. tostring(tick())
     local success, content = pcall(function() return game:HttpGet(noCacheUrl) end)
     if success then
@@ -80,6 +81,9 @@ local function LoadModule(url)
     return nil
 end
 
+-- ====================================================
+-- MAIN LOGIC
+-- ====================================================
 task.spawn(function()
     task.wait(1)
     Log("Initializing...", Color3.fromRGB(255, 255, 255))
@@ -89,7 +93,7 @@ task.spawn(function()
     if not Utils then Log("FAIL: Utilities.lua", Color3.fromRGB(255, 0, 0)); return end
     
     local SaveData = Utils.LoadData()
-    Log("Data: " .. LocalPlayer.Name, Color3.fromRGB(200, 200, 200))
+    Log("User: " .. LocalPlayer.Name, Color3.fromRGB(200, 200, 200))
 
     -- 2. Claim Hive
     local ClaimModule = LoadModule("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/ClaimHive.lua")
@@ -104,23 +108,29 @@ task.spawn(function()
         if RedeemModule then RedeemModule.Run(Log, WaitIfPaused, Utils) end
     end
 
-    -- 4. Cotmoc1 (QUAN TRỌNG)
+    -- 4. Cotmoc1
     if not SaveData.Cotmoc1Done then
-        task.wait(1)
-        Log("Downloading Cotmoc1...", Color3.fromRGB(255, 255, 0))
-        
-        -- Dùng hàm LoadModule mới để tải Cotmoc1
         local CM1Module = LoadModule("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/Cotmoc1.lua")
-        
         if CM1Module then
-            Log("Running Cotmoc1...", Color3.fromRGB(255, 255, 255))
             CM1Module.Run(Log, WaitIfPaused, Utils)
-        else
-            Log("CRITICAL: Cotmoc1 Load Failed!", Color3.fromRGB(255, 0, 0))
         end
-    else
-        Log("Cotmoc1: Done previously", Color3.fromRGB(100, 255, 100))
     end
     
-    Log("System Idle", Color3.fromRGB(150, 150, 150))
+    -- =================================================================
+    -- CHỨC NĂNG TEST FARM (MỚI THÊM)
+    -- =================================================================
+    local TEST_FIELD = "Sunflower Field" -- << Đổi tên cánh đồng bạn muốn test ở đây
+    
+    Log("Loading AutoFarm Module...", Color3.fromRGB(255, 255, 0))
+    local AutoFarm = LoadModule("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/AutoFarm.lua")
+    
+    if AutoFarm then
+        task.wait(1)
+        Log("🧪 TESTING: " .. TEST_FIELD, Color3.fromRGB(0, 255, 255))
+        
+        -- Gọi hàm Farm (Lưu ý: Hàm này sẽ chạy vòng lặp mãi mãi)
+        AutoFarm.StartFarm(TEST_FIELD, Log, Utils)
+    else
+        Log("❌ Lỗi: Không tải được AutoFarm!", Color3.fromRGB(255, 0, 0))
+    end
 end)
