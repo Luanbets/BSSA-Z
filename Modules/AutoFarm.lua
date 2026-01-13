@@ -58,9 +58,8 @@ function module.StartFarm(fieldName, Tools)
             -- 1. Auto Dig
             pcall(function() ReplicatedStorage.Events.ToolCollect:FireServer() end)
             
-            -- 2. Auto Convert (LOGIC CHUẨN)
+            -- 2. KIỂM TRA BALO & CONVERT
             if LocalPlayer:FindFirstChild("CoreStats") then
-                -- [SỬA LỖI TẠI ĐÂY] Dùng Pollen (Phấn hoa) thay vì GetHoney (Tiền)
                 local currentPollen = LocalPlayer.CoreStats.Pollen.Value   
                 local maxCapacity = LocalPlayer.CoreStats.Capacity.Value   
                 
@@ -76,18 +75,14 @@ function module.StartFarm(fieldName, Tools)
                      -- B. Gửi lệnh làm mật
                      ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
                      
-                     -- C. Chờ phấn hoa về 0 (đang convert)
-                     local waitCount = 0
-                     while LocalPlayer.CoreStats.Pollen.Value > 0 and waitCount < 60 do
-                        -- Nhảy nhẹ để server không kick AFK
-                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                            LocalPlayer.Character.Humanoid.Jump = true
-                        end
-                        waitCount = waitCount + 1
+                     -- C. VÒNG LẶP CHỜ VỀ 0 (NGHIÊM NGẶT)
+                     -- Chỉ thoát khi Pollen <= 0 (tức là bằng 0)
+                     while LocalPlayer.CoreStats.Pollen.Value > 0 do
+                        -- Đứng yên chờ, không nhảy nhót
                         task.wait(1)
                      end
                      
-                     Log("🔙 Đã làm mật xong! Quay lại farm...", Color3.fromRGB(0, 255, 255))
+                     Log("🔙 Đã convert sạch (0). Quay lại farm...", Color3.fromRGB(0, 255, 255))
 
                      -- D. Quay lại Field
                      Utils.Tween(CFrame.new(FieldInfo.Pos + Vector3.new(0,5,0)), task.wait)
