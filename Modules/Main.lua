@@ -1,61 +1,107 @@
+-- ====================================================
+-- AUTO BEE SWARM - ZERO TOUCH (MANAGER)
+-- Created for: Luận
+-- ====================================================
 local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 
--- Hàm tải module từ Github (Chống Cache)
-local function LoadModule(url)
-    local finalUrl = url .. "?t=" .. tostring(tick())
-    local success, content = pcall(function() return game:HttpGet(finalUrl) end)
-    if success then
-        local func = loadstring(content)
-        if func then return func() end
+-- 1. CẤU HÌNH REPO
+local REPO_URL = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/"
+
+-- Hàm tải module thông minh (Cache Busting)
+local function LoadModule(scriptName)
+    local url = REPO_URL .. scriptName .. "?t=" .. tostring(tick())
+    local success, content = pcall(function() return game:HttpGet(url) end)
+    if not success then
+        warn("❌ Lỗi tải: " .. scriptName)
+        return nil
     end
-    warn("Failed to load: " .. url)
-    return nil
+    local func = loadstring(content)
+    return func()
 end
 
--- === BASE URL ===
-local REPO = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/refs/heads/main/Modules/"
-
-task.spawn(function()
-    print("--- LOADING SYSTEM ---")
-
-    -- 1. LOAD CÁC WORKER CƠ BẢN (DATA & UTILS)
-    local Utils       = LoadModule(REPO .. "Utilities.lua")
-    local FieldData   = LoadModule(REPO .. "FieldData.lua")
-    local TokenData   = LoadModule(REPO .. "TokenData.lua")
-    local PlayerUtils = LoadModule(REPO .. "PlayerUtils.lua")
-    local ShopUtils   = LoadModule(REPO .. "ShopUtils.lua")
-    local AutoFarm    = LoadModule(REPO .. "AutoFarm.lua")
-    
-    -- Kiểm tra tải thành công
-    if not (Utils and FieldData and TokenData and PlayerUtils and ShopUtils and AutoFarm) then
-        warn("Lỗi tải thư viện cơ bản!")
-        return
+-- UI LOG NHỎ GỌN
+local function CreateLogUI()
+    -- (Giữ nguyên UI của bạn hoặc rút gọn, ở đây mình làm hàm log đơn giản để in ra console/màn hình)
+    local screen = Instance.new("ScreenGui", CoreGui)
+    screen.Name = "BSSA_Log"
+    local label = Instance.new("TextLabel", screen)
+    label.Size = UDim2.new(1, 0, 0, 30)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 0.5
+    label.BackgroundColor3 = Color3.new(0,0,0)
+    label.TextColor3 = Color3.new(1,1,1)
+    label.TextSize = 18
+    return function(msg, color)
+        label.Text = msg
+        label.TextColor3 = color or Color3.new(1,1,1)
+        print("[BSSA]: " .. msg)
     end
+end
+local Log = CreateLogUI()
 
-    -- Hàm Log & Wait (Truyền vào các cột mốc)
-    local function Log(txt, clr) print(txt) end -- Bạn có thể thay bằng UI Log của bạn
-    local function WaitFunc() task.wait() end
+-- ====================================================
+-- 2. KHỞI TẠO CÁC WORKER (LOAD 1 LẦN DÙNG MÃI)
+-- ====================================================
+Log("Loading Modules...", Color3.fromRGB(255, 255, 0))
 
-    -- 2. CLAIM HIVE & REDEEM CODE
-    local ClaimHive = LoadModule(REPO .. "ClaimHive.lua")
-    if ClaimHive then ClaimHive.Run(Log, WaitFunc, Utils) end
+local Utilities   = LoadModule("Utilities.lua")
+local PlayerUtils = LoadModule("PlayerUtils.lua")
+local ShopUtils   = LoadModule("ShopUtils.lua")
+local TokenData   = LoadModule("TokenData.lua")
+local FieldData   = LoadModule("FieldData.lua")
+local AutoFarm    = LoadModule("AutoFarm.lua")
 
-    local RedeemCode = LoadModule(REPO .. "RedeemCode.lua")
-    if RedeemCode then RedeemCode.Run(Log, WaitFunc, Utils) end
+-- Kiểm tra load thành công
+if not (Utilities and PlayerUtils and ShopUtils and TokenData and FieldData and AutoFarm) then
+    Log("❌ CRITICAL ERROR: Failed to load modules!", Color3.fromRGB(255, 0, 0))
+    return
+end
 
-    -- 3. CHẠY TIẾN TRÌNH (COT MOC)
-    -- Nhìn kỹ: Main truyền TOÀN BỘ công cụ vào Cột Mốc
-    local UserData = Utils.LoadData()
-
-    if not UserData.Cotmoc1Done then
-        local Cotmoc1 = LoadModule(REPO .. "Cotmoc1.lua")
-        if Cotmoc1 then
-            -- SYNC: Cotmoc1 nhận AutoFarm, ShopUtils, FieldData... từ Main
-            Cotmoc1.Run(Log, WaitFunc, Utils, ShopUtils, PlayerUtils, AutoFarm, FieldData, TokenData)
+-- ====================================================
+-- 3. LOGIC CHÍNH (TIẾN TRÌNH)
+-- ====================================================
+task.spawn(function()
+    local SaveData = Utilities.LoadData() -- Load tiến trình đã lưu
+    
+    -- A. CLAIM HIVE (Nếu chưa có)
+    if not SaveData.HiveClaimed then
+        local ClaimHive = LoadModule("ClaimHive.lua")
+        if ClaimHive and ClaimHive.Run(Log, task.wait, Utilities) then
+            Utilities.SaveData("HiveClaimed", true)
         end
     end
-    
-    -- Sau này bạn thêm if not 5BeeZoneDone thì load 5BeeZone.lua và truyền y hệt...
-    print("--- SYSTEM READY ---")
+
+    -- B. REDEEM CODE (Chạy 1 lần)
+    if not SaveData.RedeemDone then
+        local RedeemCode = LoadModule("RedeemCode.lua")
+        if RedeemCode then 
+            RedeemCode.Run(Log, task.wait, Utilities) 
+        end
+    end
+
+    -- C. QUẢN LÝ TIẾN TRÌNH (STARTER -> 5 BEE -> ...)
+    -- Truyền toàn bộ công cụ vào Cotmoc để nó tự xử lý
+    local Tools = {
+        Log = Log,
+        Utils = Utilities,
+        Player = PlayerUtils,
+        Shop = ShopUtils,
+        Farm = AutoFarm,
+        Field = FieldData
+    }
+
+    -- Cột Mốc 1: Starter (Trứng + Dụng cụ cơ bản)
+    if not SaveData.Cotmoc1Done then
+        local Cotmoc1 = LoadModule("Cotmoc1.lua")
+        if Cotmoc1 then
+            Cotmoc1.Run(Tools) -- Chạy Cột mốc 1
+        end
+    end
+
+    -- Cột Mốc 2: 5 Bee Zone (Ví dụ sau này bạn thêm)
+    -- if not SaveData.Cotmoc2Done then ... end
+
+    Log("✅ All Tasks Completed (For now)", Color3.fromRGB(0, 255, 0))
 end)
