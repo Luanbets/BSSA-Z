@@ -7,6 +7,7 @@ local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PlaceEgg = LoadModule("PlaceEgg.lua")
 
 -- 1. CẤU HÌNH REPO (CHÍNH XÁC TUYỆT ĐỐI)
 local REPO_URL = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/"
@@ -144,7 +145,8 @@ task.spawn(function()
         Shop = ShopUtils,
         Farm = AutoFarm,
         Field = FieldData,
-        Token = TokenData
+        Token = TokenData,
+        Hatch = PlaceEgg
     }
 
     local SaveData = Utilities.LoadData()
