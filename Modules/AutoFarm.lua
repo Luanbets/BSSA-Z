@@ -26,12 +26,16 @@ function module.StartFarm(fieldName, Tools)
     if isFarming then return end -- Đang farm thì thôi
     isFarming = true
     
-    local FieldInfo = Tools.Field[fieldName]
+    -- === [SỬA LỖI TẠI ĐÂY] ===
+    -- Cần gọi vào .Fields vì trong FieldData.lua bạn để dữ liệu trong bảng Fields
+    local FieldInfo = Tools.Field.Fields[fieldName] 
+    -- =========================
+
     local Utils = Tools.Utils
     local Log = Tools.Log
     
     if not FieldInfo then 
-        Log("❌ AutoFarm: Unknown Field " .. fieldName, Color3.fromRGB(255, 0, 0))
+        Log("❌ AutoFarm: Unknown Field " .. tostring(fieldName), Color3.fromRGB(255, 0, 0))
         isFarming = false 
         return 
     end
