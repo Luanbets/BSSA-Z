@@ -1,5 +1,5 @@
 -- ====================================================
--- AUTO BEE SWARM - ZERO TOUCH (MANAGER V4 - MULTITASKING)
+-- AUTO BEE SWARM - ZERO TOUCH (MANAGER V4 - FINAL)
 -- Created for: Luận
 -- ====================================================
 local Players = game:GetService("Players")
@@ -75,14 +75,11 @@ local function StartBackgroundCheck(Tools)
             local pending = data.PendingItems or {} -- Lấy danh sách nợ
             
             if #pending > 0 then
-                -- Log("🔍 Checking " .. #pending .. " skipped items...", Color3.fromRGB(150, 150, 150))
-                
                 local newPending = {}
                 local boughtSomething = false
                 
                 for _, itemData in ipairs(pending) do
                     -- Kiểm tra xem đủ điều kiện mua chưa (Tiền + Nguyên liệu)
-                    -- Lưu ý: Hàm CheckRequirements trả về {CanBuy = true/false, ...}
                     local check = Tools.Shop.CheckRequirements(itemData.Item, Tools.Player)
                     
                     if check.CanBuy then
@@ -90,7 +87,6 @@ local function StartBackgroundCheck(Tools)
                         Tools.Log("⚡ Background Buy: " .. itemData.Item, Color3.fromRGB(0, 255, 0))
                         
                         -- Tạm dừng Farm 1 chút để mua cho an toàn
-                        local wasFarming = true -- Giả định đang farm
                         Tools.Farm.StopFarm()
                         task.wait(0.5)
                         
@@ -102,7 +98,6 @@ local function StartBackgroundCheck(Tools)
                         
                         task.wait(1)
                         boughtSomething = true
-                        -- Mua xong thì KHÔNG thêm vào newPending nữa (Đã trả nợ xong)
                     else
                         -- Vẫn chưa đủ -> Giữ lại trong danh sách nợ
                         table.insert(newPending, itemData)
@@ -112,14 +107,9 @@ local function StartBackgroundCheck(Tools)
                 -- Cập nhật lại danh sách nợ mới
                 if boughtSomething or #newPending ~= #pending then
                     Tools.Utils.SaveData("PendingItems", newPending)
-                    
-                    -- Nếu đã trả hết nợ
                     if #newPending == 0 then
                         Tools.Log("🎉 All Skipped Items Cleared!", Color3.fromRGB(0, 255, 0))
                     end
-                    
-                    -- Tiếp tục farm (Nếu đang ở trong vòng lặp farm của Zone 5 thì nó tự chạy tiếp)
-                    -- Ở đây ta chỉ cần đảm bảo không bị kẹt là được.
                 end
             end
         end
@@ -175,7 +165,7 @@ task.spawn(function()
 
     -- B. CHẠY STARTER (NẾU CHƯA XONG)
     if not SaveData.StarterDone then
-        local Starter = LoadModule("Starter.lua") -- Tải Starter V4 (Có Skip logic)
+        local Starter = LoadModule("Starter.lua") -- Tải Starter V4
         if Starter then
             Starter.Run(Tools) -- Chạy xong Starter mới đi tiếp
         end
@@ -184,29 +174,37 @@ task.spawn(function()
     end
 
     -- C. KÍCH HOẠT CHẾ ĐỘ CHECK NGẦM (MULTITASKING)
-    -- Từ giờ trở đi, nó sẽ âm thầm check các món đồ bị skip mỗi 30s
     StartBackgroundCheck(Tools)
 
-    -- D. CHUYỂN SANG ZONE TIẾP THEO (5 BEE ZONE / AUTO FARM LOOP)
-    Log("🚀 Entering Main Farm Loop (Zone 5+)...", Color3.fromRGB(0, 255, 255))
+    -- D. VÒNG LẶP FARM VĨNH VIỄN (Logic Động hoàn toàn)
+    Log("🚀 Entering Permanent Farm Loop...", Color3.fromRGB(0, 255, 255))
     
-    -- Ví dụ sau này bạn có file 5BeeZone.lua:
-    -- local Zone5 = LoadModule("5BeeZone.lua")
-    -- if Zone5 then Zone5.Run(Tools) end
-    
-    -- Hiện tại: Treo máy Farm vĩnh viễn (Giả lập Zone tiếp theo)
-    -- Nó sẽ farm ở Bamboo Field (hoặc cánh đồng tốt nhất cho Blueberry nếu bạn muốn)
+    local targetMaterial = "Honey" -- Mặc định là Honey
+    local lastField = "" -- Dùng để kiểm tra xem có thay đổi field không
+
     while true do
-        -- Kiểm tra xem có đủ ong vào Bamboo không (5 ong)
-        if PlayerUtils.GetBeeCount() >= 5 then
-            Tools.Farm.StartFarm("Bamboo Field", Tools.Log, Tools.Utils)
+        -- 1. Gọi FieldData để lấy cánh đồng tốt nhất (Dựa trên số ong hiện tại)
+        -- Logic: FieldData tự check Bees -> Trả về Field ngon nhất (Sunflower, Bamboo, Pine...)
+        local bestField, fieldInfo = Tools.Field.GetBestFieldForMaterial(targetMaterial)
+        
+        if bestField and fieldInfo then
+            -- Chỉ log khi đổi địa điểm
+            if lastField ~= bestField then
+                Tools.Log("📍 Farming optimized for Honey at: " .. bestField, Color3.fromRGB(255, 255, 0))
+                lastField = bestField
+            end
+            
+            -- 2. Gửi lệnh cho AutoFarm
+            -- AutoFarm sẽ tự xử lý việc bay đến Position và Size lấy từ fieldInfo (nếu Module AutoFarm hỗ trợ)
+            -- Hoặc chỉ cần gửi tên field nếu AutoFarm tự tra cứu lại.
+            Tools.Farm.StartFarm(bestField, Tools.Log, Tools.Utils)
+            
         else
-            -- Chưa đủ 5 ong thì farm Sunflower tiếp
-            Tools.Farm.StartFarm("Sunflower Field", Tools.Log, Tools.Utils)
+            Tools.Log("⚠️ No suitable field found for Honey logic!", Color3.fromRGB(255, 0, 0))
         end
         
-        -- Dừng một chút để check lại (thực ra AutoFarm đã có vòng lặp riêng, 
-        -- nhưng đây là vòng lặp của Main để quản lý lại nếu AutoFarm bị crash hoặc dừng)
-        task.wait(10)
+        -- Check lại mỗi 5 giây để đảm bảo nếu user mua thêm ong, 
+        -- vòng lặp sau FieldData sẽ tự trả về cánh đồng mới xịn hơn.
+        task.wait(5)
     end
 end)
