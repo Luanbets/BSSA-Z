@@ -18,6 +18,7 @@ local function GetMyHivePosition()
             end
         end
     end
+    -- Nếu không thấy tổ thì bay về Spawn để an toàn
     return Vector3.new(0, 5, 0)
 end
 
@@ -29,6 +30,7 @@ function module.StartFarm(fieldName, Tools)
     if isFarming then return end 
     isFarming = true
     
+    -- Lấy thông tin Field
     local FieldInfo = nil
     if Tools.Field and Tools.Field.Fields then
         FieldInfo = Tools.Field.Fields[fieldName] 
@@ -67,17 +69,16 @@ function module.StartFarm(fieldName, Tools)
                      -- 2. Gửi lệnh làm mật
                      ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
                      
-                     -- 3. CHỜ PHẤN HOA VỀ 0 (VÒNG LẶP VĨNH VIỄN)
-                     -- Tuyệt đối không nhảy, chỉ đứng check
-                     Log("⏳ Đang convert... (Chờ về 0)", Color3.fromRGB(255, 255, 0))
+                     -- 3. CHỜ PHẤN HOA VỀ 0 (TUYỆT ĐỐI KHÔNG NHẢY)
+                     Log("⏳ Đang convert... (Đứng yên chờ về 0)", Color3.fromRGB(255, 255, 0))
                      
                      while LocalPlayer.CoreStats.Pollen.Value > 0 do
-                        -- Code này chặn mọi hành động khác, nhân vật sẽ đứng yên
+                        -- Code này chặn đứng tại đây, nhân vật sẽ đứng yên cho đến khi sạch balo
                         task.wait(1) 
                      end
                      
                      -- 4. CHỜ THÊM 5 GIÂY (THEO YÊU CẦU)
-                     Log("✅ Đã về 0. Đợi thêm 5s cho chắc...", Color3.fromRGB(0, 255, 0))
+                     Log("✅ Đã sạch balo. Đợi thêm 5s...", Color3.fromRGB(0, 255, 0))
                      task.wait(5)
 
                      Log("🔙 Quay lại farm...", Color3.fromRGB(0, 255, 255))
