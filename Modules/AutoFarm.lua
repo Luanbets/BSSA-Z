@@ -8,7 +8,7 @@ local LocalPlayer = Players.LocalPlayer
 local TokenDataDB = nil 
 local isFarming = false
 
--- Hàm hỗ trợ tìm tổ của mình
+-- Hàm hỗ trợ tìm tổ của mình (để bay về convert)
 local function GetMyHivePosition()
     local honeycombs = workspace:FindFirstChild("Honeycombs") or workspace:FindFirstChild("Hives")
     if honeycombs then
@@ -20,14 +20,7 @@ local function GetMyHivePosition()
             end
         end
     end
-    return Vector3.new(0, 5, 0) -- Fallback
-end
-
-local function GetTokenPriority(texID, TokenDB)
-    if not TokenDB then return 0 end
-    local cleanID = "rbxassetid://" .. tostring(string.match(texID, "%d+$"))
-    if TokenDB.Tokens[cleanID] then return TokenDB.Tokens[cleanID].Priority end
-    return 0
+    return Vector3.new(0, 5, 0) -- Fallback nếu không tìm thấy
 end
 
 function module.StopFarm()
@@ -39,12 +32,11 @@ function module.StartFarm(fieldName, Tools)
     if isFarming then return end 
     isFarming = true
     
-    -- === [ĐÃ SỬA: LẤY ĐÚNG FIELD DATA] ===
+    -- Lấy thông tin Field từ module FieldData
     local FieldInfo = nil
     if Tools.Field and Tools.Field.Fields then
         FieldInfo = Tools.Field.Fields[fieldName] 
     end
-    -- ======================================
 
     local Utils = Tools.Utils
     local Log = Tools.Log
@@ -66,10 +58,11 @@ function module.StartFarm(fieldName, Tools)
             -- 1. Auto Dig
             pcall(function() ReplicatedStorage.Events.ToolCollect:FireServer() end)
             
-            -- 2. Auto Convert (ĐÃ SỬA LOGIC)
+            -- 2. Auto Convert (LOGIC CHUẨN)
             if LocalPlayer:FindFirstChild("CoreStats") then
-                local currentPollen = LocalPlayer.CoreStats.Pollen.Value   -- Lấy Phấn Hoa
-                local maxCapacity = LocalPlayer.CoreStats.Capacity.Value   -- Lấy Sức chứa
+                -- [SỬA LỖI TẠI ĐÂY] Dùng Pollen (Phấn hoa) thay vì GetHoney (Tiền)
+                local currentPollen = LocalPlayer.CoreStats.Pollen.Value   
+                local maxCapacity = LocalPlayer.CoreStats.Capacity.Value   
                 
                 -- Nếu đầy 95% thì về
                 if currentPollen >= (maxCapacity * 0.95) then
@@ -83,7 +76,7 @@ function module.StartFarm(fieldName, Tools)
                      -- B. Gửi lệnh làm mật
                      ReplicatedStorage.Events.PlayerHiveCommand:FireServer("ToggleHoneyMaking")
                      
-                     -- C. Chờ phấn hoa về 0
+                     -- C. Chờ phấn hoa về 0 (đang convert)
                      local waitCount = 0
                      while LocalPlayer.CoreStats.Pollen.Value > 0 and waitCount < 60 do
                         -- Nhảy nhẹ để server không kick AFK
@@ -101,10 +94,9 @@ function module.StartFarm(fieldName, Tools)
                 end
             end
 
-            -- 3. Tìm Token & Random Move
+            -- 3. Random Move (chống AFK và lụm token)
             local Character = LocalPlayer.Character
             if Character and Character:FindFirstChild("Humanoid") then
-                -- Random Move
                 local rx = math.random(-FieldInfo.Size.X/2 + 5, FieldInfo.Size.X/2 - 5)
                 local rz = math.random(-FieldInfo.Size.Z/2 + 5, FieldInfo.Size.Z/2 - 5)
                 Character.Humanoid:MoveTo(FieldInfo.Pos + Vector3.new(rx, 0, rz))
