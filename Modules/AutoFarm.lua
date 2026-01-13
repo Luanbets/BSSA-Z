@@ -74,6 +74,7 @@ function module.StartFarm(fieldName, Tools)
                      
                      while LocalPlayer.CoreStats.Pollen.Value > 0 do
                         -- Code này chặn đứng tại đây, nhân vật sẽ đứng yên cho đến khi sạch balo
+                        if not isFarming then break end -- [FIX] Thoát nếu bị tắt farm giữa chừng
                         task.wait(1) 
                      end
                      
@@ -99,6 +100,28 @@ function module.StartFarm(fieldName, Tools)
             task.wait(0.2)
         end
     end)
+end
+
+-- [MỚI] Hàm Farm cho đến khi đủ tiền (Chặn Starter lại)
+function module.FarmUntil(targetHoney, fieldName, Tools)
+    local Player = Tools.Player
+    local Log = Tools.Log
+    
+    -- Gọi farm bình thường
+    module.StartFarm(fieldName, Tools)
+    
+    Log("⏳ AutoFarm: Cày đến " .. tostring(targetHoney) .. " Honey...", Color3.fromRGB(255, 255, 0))
+
+    -- Vòng lặp chặn: Starter sẽ kẹt ở đây cho đến khi đủ tiền
+    -- Trong lúc kẹt, AutoFarm vẫn chạy vòng lặp convert của riêng nó thoải mái
+    while Player.GetHoney() < targetHoney do
+        task.wait(1) 
+    end
+    
+    -- Đủ tiền rồi -> Dừng farm -> Trả quyền cho Starter đi mua đồ
+    module.StopFarm()
+    Log("✅ AutoFarm: Đã đủ tiền! Dừng để đi mua.", Color3.fromRGB(0, 255, 0))
+    task.wait(1) 
 end
 
 return module
