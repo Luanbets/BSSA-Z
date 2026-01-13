@@ -25,7 +25,7 @@ function module.Tween(targetCFrame, WaitFunc)
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
     local root = LocalPlayer.Character.HumanoidRootPart
     local dist = (root.Position - targetCFrame.Position).Magnitude
-    local speed = 25 -- Tốc độ bay
+    local speed = 100 -- Tốc độ bay
     
     local info = TweenInfo.new(dist / speed, Enum.EasingStyle.Linear)
     local tween = TweenService:Create(root, info, {CFrame = targetCFrame})
