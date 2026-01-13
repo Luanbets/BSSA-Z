@@ -2,51 +2,13 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local lp = Players.LocalPlayer
 
--- =========================================================
--- 1. HÀM ĐẾM SỐ ONG (CHẠY NGẦM - KHÔNG PRINT)
--- =========================================================
-local function getRealBeeCount()
-    local honeycombs = Workspace:FindFirstChild("Honeycombs")
-    if not honeycombs then return 0 end
-
-    -- A. Tìm Hive của mình
-    local myHive = nil
-    for _, hive in pairs(honeycombs:GetChildren()) do
-        if hive:FindFirstChild("Owner") and hive.Owner.Value == lp then
-            myHive = hive
-            break
-        end
-    end
-
-    -- B. Đếm slot trong Cells
-    if myHive then
-        local cellsFolder = myHive:FindFirstChild("Cells")
-        if cellsFolder then
-            local beeCount = 0
-            for _, cell in pairs(cellsFolder:GetChildren()) do
-                if cell:IsA("Model") and string.sub(cell.Name, 1, 1) == "C" then
-                    local cellType = cell:FindFirstChild("CellType")
-                    if cellType then
-                        if cellType.Value ~= "Empty" and cellType.Value ~= 0 then
-                            beeCount = beeCount + 1
-                        end
-                    else
-                        beeCount = beeCount + 1 -- Fallback
-                    end
-                end
-            end
-            return beeCount
-        end
-    end
-    
-    return 0
-end
+-- Tạo một cái Table chính để chứa tất cả (Data + Hàm)
+local FieldModule = {}
 
 -- =========================================================
--- 2. DỮ LIỆU FIELD DATA (ĐÃ CẬP NHẬT CHÍNH XÁC + SIZE)
+-- 1. DỮ LIỆU CÁNH ĐỒNG (DATA RAW)
 -- =========================================================
--- Lưu ý: Position đã được nâng nhẹ trục Y để nhân vật đứng trên mặt đất
-local FieldData = {
+FieldModule.Fields = {
     -- [0 Bee Zone]
     ["Sunflower Field"]   = {ID = 10614, Pos = Vector3.new(-208.95, 4, 176.58), Size = Vector3.new(80.71, 1, 131.51), Color = "White", ReqBees = 0},
     ["Dandelion Field"]   = {ID = 10415, Pos = Vector3.new(-29.70, 4, 221.57),  Size = Vector3.new(143.65, 1, 72.50), Color = "White", ReqBees = 0},
@@ -78,9 +40,9 @@ local FieldData = {
 }
 
 -- =========================================================
--- 3. CẤU HÌNH MATERIAL MAP (LOGIC CHỌN)
+-- 2. CẤU HÌNH MATERIAL MAP
 -- =========================================================
-local MaterialMap = {
+FieldModule.MaterialMap = {
     ["Sunflower Seed"] = {"Sunflower Field"},
     ["Pineapple"]      = {"Pineapple Patch"},
     ["Blueberry"]      = {"Blue Flower Field", "Bamboo Field", "Pine Tree Forest"},
@@ -89,14 +51,48 @@ local MaterialMap = {
 }
 
 -- =========================================================
--- 4. HÀM TÌM CÁNH ĐỒNG TỐT NHẤT (RETURN INFO)
+-- 3. HÀM NỘI BỘ (Local Function - Chỉ dùng trong file này)
 -- =========================================================
-function GetBestFieldForMaterial(targetName)
-    local playerBees = getRealBeeCount() -- Tự động lấy số ong thật
-    local possibleFields = MaterialMap[targetName]
+local function getRealBeeCount()
+    local honeycombs = Workspace:FindFirstChild("Honeycombs")
+    if not honeycombs then return 0 end
+    local myHive = nil
+    for _, hive in pairs(honeycombs:GetChildren()) do
+        if hive:FindFirstChild("Owner") and hive.Owner.Value == lp then
+            myHive = hive
+            break
+        end
+    end
+    if myHive then
+        local cellsFolder = myHive:FindFirstChild("Cells")
+        if cellsFolder then
+            local beeCount = 0
+            for _, cell in pairs(cellsFolder:GetChildren()) do
+                if cell:IsA("Model") and string.sub(cell.Name, 1, 1) == "C" then
+                    local cellType = cell:FindFirstChild("CellType")
+                    if cellType and (cellType.Value ~= "Empty" and cellType.Value ~= 0) then
+                        beeCount = beeCount + 1
+                    elseif not cellType then
+                        beeCount = beeCount + 1
+                    end
+                end
+            end
+            return beeCount
+        end
+    end
+    return 0
+end
+
+-- =========================================================
+-- 4. HÀM EXPORT (Public Function - Manager sẽ gọi hàm này)
+-- =========================================================
+-- CHÚ Ý: Dùng 'FieldModule.GetBestFieldForMaterial' thay vì 'function GetBest...'
+function FieldModule.GetBestFieldForMaterial(targetName)
+    local playerBees = getRealBeeCount() -- Gọi hàm đếm ong nội bộ
+    local possibleFields = FieldModule.MaterialMap[targetName]
     
     if not possibleFields then 
-        warn("Không tìm thấy dữ liệu cho vật phẩm: " .. tostring(targetName))
+        warn("Không tìm thấy map cho: " .. tostring(targetName))
         return nil 
     end
 
@@ -104,7 +100,7 @@ function GetBestFieldForMaterial(targetName)
     local highestReq = -1 
 
     for _, fieldName in pairs(possibleFields) do
-        local data = FieldData[fieldName]
+        local data = FieldModule.Fields[fieldName]
         
         -- So sánh: Nếu có data và đủ ong
         if data and playerBees >= data.ReqBees then
@@ -115,33 +111,12 @@ function GetBestFieldForMaterial(targetName)
         end
     end
     
-    -- Trả về cả Tên và Data (Pos, Size) để dùng luôn
+    -- Trả về: Tên đồng, Data đầy đủ (Pos, Size)
     if bestField then
-        return bestField, FieldData[bestField]
+        return bestField, FieldModule.Fields[bestField]
     else
         return nil
     end
 end
 
--- =========================================================
--- VÍ DỤ CÁCH DÙNG (TEST)
--- =========================================================
-
--- Giả sử bạn muốn farm Honey
-local targetMaterial = "Honey"
-local fieldName, fieldInfo = GetBestFieldForMaterial(targetMaterial)
-
-if fieldName and fieldInfo then
-    print("-------------------------------------------------")
-    print("Đang đi tới cánh đồng tốt nhất cho: " .. targetMaterial)
-    print("Tên đồng: " .. fieldName)
-    print("Toạ độ tâm (Position): " .. tostring(fieldInfo.Pos))
-    print("Kích thước vùng (Size): " .. tostring(fieldInfo.Size))
-    print("-------------------------------------------------")
-    
-    -- Code Teleport đơn giản (Minh hoạ)
-    -- lp.Character.HumanoidRootPart.CFrame = CFrame.new(fieldInfo.Pos)
-else
-    print("Bạn chưa đủ ong để farm vật phẩm này hoặc tên sai!")
-end
-return FieldData
+return FieldModule
