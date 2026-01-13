@@ -64,13 +64,8 @@ function module.Run(Tools)
                     local current = Player.GetHoney()
                     local target = result.Price or (current + (result.MissingHoney or 0))
                     
-                    -- Chạy farm trước
-                    Farm.StartFarm(FARM_DEFAULT, Tools)
-                    
-                    -- [FIX 2] Log tiền SAU khi gọi Farm để nó hiện lên dòng 2 của UI (không bị đè)
-                    Log("📉 Farm Honey: " .. FormatNum(current) .. " / " .. FormatNum(target), Color3.fromRGB(255, 170, 0))
-                    
-                    task.wait(15) 
+                    -- [FIX] Giao quyền cho AutoFarm tự lo, Starter đứng chờ đủ tiền mới chạy tiếp
+                    Farm.FarmUntil(target, FARM_DEFAULT, Tools)
                 end
             end
         end
@@ -95,11 +90,8 @@ function module.Run(Tools)
                      local current = Player.GetHoney()
                      local target = result.Price or 0
                      
-                     Farm.StartFarm(FARM_DEFAULT, Tools)
-                     -- Log tiền sau cùng
-                     Log("📉 " .. itemName .. ": " .. FormatNum(current) .. " / " .. FormatNum(target), Color3.fromRGB(255, 170, 0))
-                     
-                     task.wait(15)
+                     -- [FIX] Giao quyền cho AutoFarm tự lo
+                     Farm.FarmUntil(target, FARM_DEFAULT, Tools)
                 else
                      Log("⏭️ Skip " .. itemName, Color3.fromRGB(255, 80, 80))
                      table.insert(SkippedItems, action)
