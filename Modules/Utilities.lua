@@ -8,8 +8,8 @@ local LocalPlayer = Players.LocalPlayer
 -- 1. CẤU HÌNH TỐC ĐỘ (Chỉnh tất cả ở đây)
 -- ==========================================
 local CONFIG = {
-    TweenSpeed = 350,   -- Tốc độ bay (Càng cao càng nhanh)
-    WalkSpeed  = 80     -- Tốc độ chạy bộ (Mặc định 16, Hack là 80)
+    TweenSpeed = 100,   -- Tốc độ bay (Càng cao càng nhanh)
+    WalkSpeed  = 150     -- Tốc độ chạy bộ (Mặc định 16, Hack là 80)
 }
 
 -- FILE SAVE SYSTEM
