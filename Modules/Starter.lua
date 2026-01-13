@@ -1,23 +1,23 @@
 local module = {}
 
 -- ============================================================
--- KỊCH BẢN TUYẾN TÍNH (LÀM XONG BƯỚC NÀY MỚI QUA BƯỚC KIA)
+-- DANH SÁCH NHIỆM VỤ (TUYẾN TÍNH)
 -- ============================================================
 local ACTION_LIST = {
     -- 1. Ấp cái trứng Free đầu game (Game cho sẵn 1 cái)
     [1] = {Type = "HatchExisting", Desc = "Hatch Free Egg"}, 
 
-    -- 2. Mua đúng 2 trứng -> Ấp luôn
+    -- 2. Mua 2 trứng -> Ấp luôn
     [2] = {Type = "BuyAndHatch", Amount = 2}, 
 
-    -- 3. Mua đồ nghề cơ bản
+    -- 3. Mua đồ nghề cơ bản (Rake, Backpack)
     [3] = {Type = "BuyItem", Item = "Backpack", Category = "Accessory"},
     [4] = {Type = "BuyItem", Item = "Rake",     Category = "Collector"},
 
-    -- 4. Mua thêm 3 trứng -> Ấp luôn (Tổng cộng sẽ có 1+2+3 = 6 ong)
+    -- 4. Mua tiếp 3 trứng -> Ấp (Tổng 6 ong để mở cổng 5)
     [5] = {Type = "BuyAndHatch", Amount = 3}, 
 
-    -- 5. Mua các đồ xịn hơn (Canister, Vacuum...)
+    -- 5. Mua các trang bị xịn hơn
     [6] = {Type = "BuyItem", Item = "Canister",      Category = "Accessory"},
     [7] = {Type = "BuyItem", Item = "Vacuum",        Category = "Collector"},
     [8] = {Type = "BuyItem", Item = "Belt Pocket",   Category = "Accessory"},
@@ -25,124 +25,120 @@ local ACTION_LIST = {
     [10]= {Type = "BuyItem", Item = "Propeller Hat", Category = "Accessory"},
 }
 
--- Hàm tìm slot trống (Giữ nguyên)
-local function GetEmptySlot(LocalPlayer)
-    local honeycombs = workspace.Honeycombs:FindFirstChild(LocalPlayer.Name .. "'s Hive")
-    if not honeycombs then return nil end
-    
-    for i = 1, 50 do
-        local cell = honeycombs.Cells:FindFirstChild("C" .. i)
-        if cell then
-            local cType = cell:FindFirstChild("CellType")
-            if cType and (cType.Value == "Empty" or cType.Value == 0) then return i end
-        end
-    end
-    return nil
-end
-
 function module.Run(Tools)
+    -- Lấy các công cụ từ Main
     local Log = Tools.Log
     local Utils = Tools.Utils
-    local Shop = Tools.Shop
+    local Shop = Tools.Shop    -- Đã tích hợp CheckAndBuy
     local Farm = Tools.Farm
+    local Hatch = Tools.Hatch  -- Module ấp trứng
     local Player = Tools.Player
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local LocalPlayer = game:GetService("Players").LocalPlayer
 
-    -- Resume (Nếu bị disconnect thì làm tiếp bước đang dở)
+    -- 1. KHÔI PHỤC TIẾN ĐỘ (RESUME)
     local savedData = Utils.LoadData()
-    if savedData.StarterDone then return end
+    if savedData.StarterDone then 
+        Log("✅ Starter Quest Completed Already.", Color3.fromRGB(0, 255, 0))
+        return 
+    end
     
     local currentStep = savedData.StarterStep or 1
     local SkippedItems = savedData.PendingItems or {}
-    local FARM_DEFAULT = "Sunflower Field"
+    local FARM_DEFAULT = "Sunflower Field" -- Chỗ farm mặc định khi thiếu tiền
 
     -- ============================================================
-    -- LOGIC 1: ẤP TRỨNG CÓ SẴN (KHÔNG MUA)
+    -- HÀM 1: ẤP TRỨNG CÓ SẴN (Dùng cho trứng Free)
     -- ============================================================
     local function Action_HatchExisting()
-        Log("🐣 Attempting to hatch existing egg...", Color3.fromRGB(255, 255, 0))
+        Log("🐣 Quest: Hatch Existing Egg", Color3.fromRGB(255, 255, 0))
         Farm.StopFarm()
         task.wait(1)
         
-        local slot = GetEmptySlot(LocalPlayer)
-        if slot then
-            ReplicatedStorage.Events.ConstructHiveCellFromEgg:InvokeServer(slot, 2, "Basic", 1, false)
-            Log("✅ Hatch Command Sent to Slot " .. slot, Color3.fromRGB(0, 255, 0))
-            task.wait(6) -- Đợi animation xong
+        -- Gọi module PlaceEgg
+        local success, msg = Hatch.Run("Basic", 1)
+        
+        if success then
+            Log("✅ Hatching Started...", Color3.fromRGB(0, 255, 0))
+            task.wait(10) -- Đợi ong nở
         else
-            Log("⚠️ No slot found or Hive full", Color3.fromRGB(255, 0, 0))
+            Log("⚠️ " .. msg, Color3.fromRGB(255, 100, 100))
         end
     end
 
     -- ============================================================
-    -- LOGIC 2: MUA VÀ ẤP (LOOP THEO SỐ LƯỢNG)
-    -- TUYỆT ĐỐI KHÔNG CHECK INVENTORY
+    -- HÀM 2: MUA VÀ ẤP (Dùng ShopUtils mới)
     -- ============================================================
     local function Action_BuyAndHatch(amount)
-        Log("🐝 Mission: Buy & Hatch " .. amount .. " Eggs", Color3.fromRGB(0, 255, 255))
+        Log("🐝 Quest: Buy & Hatch " .. amount .. " Eggs", Color3.fromRGB(0, 255, 255))
         
         for k = 1, amount do
             Log("   > Processing Egg " .. k .. "/" .. amount, Color3.fromRGB(200, 200, 200))
             
-            -- BƯỚC 1: Cày tiền (nếu thiếu)
-            -- Mặc dù không check trứng, nhưng phải check tiền để mua được
-            while true do
-                local check = Shop.CheckRequirements("Basic Egg", Player)
-                if check.CanBuy then break end -- Đủ tiền thì thoát vòng lặp để mua
+            local bought = false
+            
+            -- Vòng lặp: Check -> Mua -> Nếu thiếu tiền thì Farm -> Check lại
+            while not bought do
+                Farm.StopFarm()
+                task.wait(0.5)
                 
-                -- Chưa đủ tiền -> Đi Farm
-                Log("📉 Not enough honey. Farming...", Color3.fromRGB(255, 100, 100))
-                Farm.StartFarm(FARM_DEFAULT, Tools.Log, Tools.Utils)
-                task.wait(5)
-            end
-            
-            -- BƯỚC 2: MUA (Bắt buộc mua, không check inventory)
-            Farm.StopFarm()
-            task.wait(0.5)
-            Log("💰 Buying Basic Egg...", Color3.fromRGB(0, 255, 0))
-            ReplicatedStorage.Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]="Basic",["Category"]="Eggs",["Amount"]=1})
-            
-            -- CHỜ SERVER XỬ LÝ (QUAN TRỌNG)
-            task.wait(2) 
-            
-            -- BƯỚC 3: ẤP LUÔN
-            local slot = GetEmptySlot(LocalPlayer)
-            if slot then
-                Log("🐣 Hatching at Slot " .. slot, Color3.fromRGB(0, 255, 0))
-                ReplicatedStorage.Events.ConstructHiveCellFromEgg:InvokeServer(slot, 2, "Basic", 1, false)
-                task.wait(6) -- Đợi animation
-            else
-                Log("⚠️ Hive Full! Cannot hatch.", Color3.fromRGB(255, 0, 0))
-                break -- Hết chỗ thì dừng loop
+                -- GỌI HÀM CHECK & BUY (Nó tự chạy ra shop, tự check giá, tự mua nếu đủ)
+                local result = Shop.CheckAndBuy("Basic Egg", Player, Log)
+                
+                if result.Purchased then
+                    bought = true
+                    Log("✅ Egg Purchased! Preparing to hatch...", Color3.fromRGB(0, 255, 0))
+                    task.wait(2) -- Đợi server xử lý item
+                    
+                    -- ẤP LUÔN
+                    local hSuccess, hMsg = Hatch.Run("Basic", 1)
+                    if hSuccess then
+                        Log("🐣 Hatching...", Color3.fromRGB(0, 255, 0))
+                        task.wait(10) -- Đợi nở
+                    else
+                        Log("⚠️ Hive Full? " .. hMsg, Color3.fromRGB(255, 0, 0))
+                        -- Nếu full tổ thì thoát vòng lặp trứng này (tránh kẹt)
+                        bought = true 
+                    end
+                else
+                    -- NẾU THIẾU TIỀN -> ĐI FARM
+                    local missing = result.MissingHoney or "Unknown"
+                    Log("📉 Missing " .. missing .. " Honey. Farming...", Color3.fromRGB(255, 100, 100))
+                    Farm.StartFarm(FARM_DEFAULT, Tools)
+                    
+                    -- Farm trong 20s rồi quay lại check tiếp
+                    task.wait(20)
+                end
             end
         end
     end
 
     -- ============================================================
-    -- LOGIC 3: MUA ITEM (ĐÃ CÓ TỪ TRƯỚC)
+    -- HÀM 3: MUA ITEM (Dùng ShopUtils mới)
     -- ============================================================
     local function Action_BuyItem(action)
         local itemName = action.Item
-        Log("🛒 Buying Item: " .. itemName, Color3.fromRGB(255, 255, 0))
+        Log("🛒 Quest: Buy Item " .. itemName, Color3.fromRGB(255, 255, 0))
         
         while true do
-            local check = Shop.CheckRequirements(itemName, Player)
-            if check.CanBuy then
-                Farm.StopFarm()
-                task.wait(0.5)
-                ReplicatedStorage.Events.ItemPackageEvent:InvokeServer("Purchase", {["Type"]=itemName, ["Category"]=action.Category})
-                Log("✅ Bought " .. itemName, Color3.fromRGB(0, 255, 0))
+            Farm.StopFarm()
+            task.wait(0.5)
+            
+            -- GỌI HÀM CHECK & BUY
+            local result = Shop.CheckAndBuy(itemName, Player, Log)
+            
+            if result.Purchased then
+                Log("✅ Automatically Bought: " .. itemName, Color3.fromRGB(0, 255, 0))
                 task.wait(1)
                 return true
             else
-                -- Logic Skip hoặc Farm như cũ
+                -- NẾU KHÔNG MUA ĐƯỢC
                 if action.Category == "Collector" then
-                     Log("⛏️ Farming for " .. itemName, Color3.fromRGB(255, 200, 100))
-                     Farm.StartFarm(FARM_DEFAULT, Tools.Log, Tools.Utils)
-                     task.wait(5)
+                     -- Collector là đồ quan trọng để farm -> Bắt buộc farm để mua
+                     Log("⛏️ Must have " .. itemName .. ". Farming...", Color3.fromRGB(255, 200, 100))
+                     Farm.StartFarm(FARM_DEFAULT, Tools)
+                     task.wait(15)
                 else
-                     Log("⏭️ Skip " .. itemName, Color3.fromRGB(255, 80, 80))
+                     -- Đồ khác (Giày, Mũ, Balo) -> Skip nếu thiếu tiền để chạy quest khác
+                     Log("⏭️ Skipping " .. itemName .. " (Add to pending)", Color3.fromRGB(255, 80, 80))
                      table.insert(SkippedItems, action)
                      return false
                 end
@@ -151,12 +147,14 @@ function module.Run(Tools)
     end
 
     -- ============================================================
-    -- MAIN LOOP (CHẠY TỪNG BƯỚC 1 -> 10)
+    -- VÒNG LẶP CHÍNH (MAIN LOOP)
     -- ============================================================
+    Log("🚀 Starting Linear Questline from Step " .. currentStep, Color3.fromRGB(0, 255, 0))
+
     for i = currentStep, #ACTION_LIST do
         local action = ACTION_LIST[i]
-        currentStep = i -- Cập nhật bước hiện tại để lưu
         
+        -- Thực hiện hành động
         if action.Type == "HatchExisting" then
             Action_HatchExisting()
             
@@ -167,15 +165,17 @@ function module.Run(Tools)
             Action_BuyItem(action)
         end
         
-        -- Lưu lại ngay sau khi xong 1 bước.
-        -- Ví dụ: Xong bước 2 (Mua 2 trứng), save Step = 3.
-        -- Nếu disconnect, vào lại sẽ làm bước 3 (Mua Backpack).
-        Utils.SaveData("StarterStep", currentStep + 1)
+        -- Cập nhật tiến độ sau khi xong mỗi bước
+        currentStep = i + 1
+        Utils.SaveData("StarterStep", currentStep)
         Utils.SaveData("PendingItems", SkippedItems)
+        task.wait(1)
     end
 
+    -- ============================================================
     -- KẾT THÚC
-    Log("🎉 Starter Finished!", Color3.fromRGB(0, 255, 0))
+    -- ============================================================
+    Log("🎉 STARTER QUESTLINE FINISHED!", Color3.fromRGB(0, 255, 0))
     Utils.SaveData("StarterDone", true)
     Farm.StopFarm()
 end
