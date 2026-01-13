@@ -6,18 +6,19 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 -- =======================================================
--- 1. LOAD UTILITIES TỰ ĐỘNG (ĐỂ SÀI TWEEN VÀ SAVE)
+-- 1. LOAD UTILITIES (ĐÃ SỬA LINK GITHUB CHUẨN)
 -- =======================================================
 local Utils = nil
 local success, result = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Luanbets/BSSA-Z/refs/heads/main/Modules/Utilities.lua"))()
+    -- Link cũ bị sai /refs/heads/, đây là link đúng:
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/Utilities.lua"))()
 end)
 
 if success and result then
     Utils = result
 else
-    -- Fallback nếu không tải được (để tránh lỗi script)
     warn("❌ ShopUtils: Failed to load Utilities.lua")
+    -- Tạo hàm rỗng để script không bị crash nếu mạng lỗi
     Utils = { Tween = function() end, SaveData = function() end }
 end
 
@@ -36,7 +37,7 @@ end
 -- 2. DỮ LIỆU CỨNG (SHOP DATA)
 -- =======================================================
 local ShopData = {
-    ["Basic Egg"] = {}, -- Logic riêng
+    ["Basic Egg"] = {}, 
     
     -- COLLECTORS
     ["Rake"] =     { Price = 800,   Type = "Collector", Category = "Collector" },
@@ -86,10 +87,10 @@ local function ExecuteBuy(itemName, category)
 end
 
 -- =======================================================
--- 4. HÀM THÔNG MINH: CHECK -> NẾU ĐỦ THÌ MUA LUÔN
+-- 4. HÀM CHECK VÀ MUA
 -- =======================================================
 function module.CheckAndBuy(itemName, PlayerUtils, LogFunc)
-    -- === A. LOGIC ĐẶC BIỆT CHO BASIC EGG ===
+    -- A. LOGIC ĐẶC BIỆT CHO BASIC EGG
     if itemName == "Basic Egg" then
         if LogFunc then LogFunc("🏃 Moving to Egg Shop to Check & Buy...", Color3.fromRGB(255, 255, 0)) end
 
@@ -100,7 +101,7 @@ function module.CheckAndBuy(itemName, PlayerUtils, LogFunc)
         -- 2. Mở Shop
         ToggleShopUI()
 
-        -- 3. Lấy giá thực tế
+        -- 3. Lấy giá
         local price = 1000 
         local startTime = tick()
         local uiFound = false
@@ -119,30 +120,24 @@ function module.CheckAndBuy(itemName, PlayerUtils, LogFunc)
             task.wait(0.5)
         end
 
-        -- 4. QUYẾT ĐỊNH MUA HAY KHÔNG
+        -- 4. QUYẾT ĐỊNH
         local myHoney = PlayerUtils.GetHoney()
         local result = { Purchased = false, MissingHoney = 0 }
 
         if myHoney >= price then
-            -- ==> ĐỦ TIỀN: MUA NGAY LẬP TỨC <==
             if LogFunc then LogFunc("💰 Price: " .. price .. " -> Buying Now!", Color3.fromRGB(0, 255, 0)) end
-            
             local buySuccess = ExecuteBuy("Basic Egg", "Eggs")
-            
             if buySuccess then
                 result.Purchased = true
                 if LogFunc then LogFunc("✅ Purchase Successful!", Color3.fromRGB(0, 255, 0)) end
-            else
-                if LogFunc then LogFunc("❌ Server Rejected Purchase!", Color3.fromRGB(255, 0, 0)) end
             end
         else
-            -- ==> THIẾU TIỀN: LƯU GIÁ VÀ RÚT LUI <==
             result.MissingHoney = price - myHoney
             Utils.SaveData("NextEggPrice", price)
             if LogFunc then LogFunc("📉 Not enough honey ("..myHoney.."/"..price.."). Needed: " .. result.MissingHoney, Color3.fromRGB(255, 100, 100)) end
         end
 
-        -- 5. Đóng Shop (Luôn đóng để tránh kẹt)
+        -- 5. Đóng Shop
         task.wait(0.5)
         ToggleShopUI()
         task.wait(1)
@@ -150,17 +145,15 @@ function module.CheckAndBuy(itemName, PlayerUtils, LogFunc)
         return result
     end
 
-    -- === B. LOGIC CHO ITEM THƯỜNG ===
+    -- B. LOGIC CHO ITEM THƯỜNG
     local data = ShopData[itemName]
     if not data then return { Purchased = false, Error = "NoData" } end
 
-    -- Check Tiền
     local myHoney = PlayerUtils.GetHoney()
     if myHoney < data.Price then
         return { Purchased = false, MissingHoney = data.Price - myHoney }
     end
 
-    -- Check Nguyên Liệu
     if data.Ingredients then
         for matName, matNeed in pairs(data.Ingredients) do
             local matHave = PlayerUtils.GetItemAmount(matName)
@@ -170,7 +163,6 @@ function module.CheckAndBuy(itemName, PlayerUtils, LogFunc)
         end
     end
 
-    -- ==> ĐỦ ĐIỀU KIỆN: MUA LUÔN <==
     if LogFunc then LogFunc("🛒 Buying Item: " .. itemName, Color3.fromRGB(0, 255, 0)) end
     local success = ExecuteBuy(itemName, data.Category)
     
