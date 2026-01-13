@@ -7,9 +7,8 @@ local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local PlaceEgg = LoadModule("PlaceEgg.lua")
 
--- 1. CẤU HÌNH REPO (CHÍNH XÁC TUYỆT ĐỐI)
+-- 1. CẤU HÌNH REPO
 local REPO_URL = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/"
 
 -- 2. HỆ THỐNG LOG (UI ĐƠN GIẢN)
@@ -31,15 +30,20 @@ logLabel.Font = Enum.Font.GothamBold
 logLabel.Text = "Initializing BSSA-Z..."
 
 local function Log(text, color)
-    logLabel.Text = text
-    logLabel.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+    if logLabel then
+        logLabel.Text = text
+        logLabel.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+    end
     print("[BSSA]: " .. text)
 end
 
--- 3. HÀM TẢI MODULE AN TOÀN
+-- 3. HÀM TẢI MODULE (ĐƯỢC ĐỊNH NGHĨA TRƯỚC KHI DÙNG)
 local function LoadModule(scriptName)
+    Log("📥 Downloading: " .. scriptName .. "...", Color3.fromRGB(255, 255, 0))
+    
     local url = REPO_URL .. scriptName .. "?t=" .. tostring(tick())
     local success, content = pcall(function() return game:HttpGet(url) end)
+    
     if not success then
         Log("❌ HTTP Fail: " .. scriptName, Color3.fromRGB(255, 80, 80))
         return nil
@@ -47,72 +51,70 @@ local function LoadModule(scriptName)
 
     local func, loadErr = loadstring(content)
     if not func then
-        Log("❌ Syntax Error: " .. scriptName, Color3.fromRGB(255, 80, 80))
+        Log("❌ Syntax Error in " .. scriptName, Color3.fromRGB(255, 80, 80))
         warn("[BSSA Syntax]: " .. tostring(loadErr))
         return nil
     end
 
     local runSuccess, module = pcall(func)
     if not runSuccess then
-        Log("❌ Runtime Error: " .. scriptName, Color3.fromRGB(255, 80, 80))
+        Log("❌ Runtime Error in " .. scriptName, Color3.fromRGB(255, 80, 80))
         warn("[BSSA Runtime]: " .. tostring(module))
         return nil
     end
+    
+    Log("✅ Loaded: " .. scriptName, Color3.fromRGB(0, 255, 0))
     return module
 end
 
 -- ====================================================
 -- 4. TÍNH NĂNG ĐA NHIỆM (CHECK BACKGROUND)
--- Tự động kiểm tra và mua các món đồ đã Skip
 -- ====================================================
 local function StartBackgroundCheck(Tools)
     task.spawn(function()
         Log("🕵️ Background Check Started (Every 30s)", Color3.fromRGB(150, 150, 150))
         
         while true do
-            task.wait(30) -- Chu kỳ kiểm tra 30 giây
-            
-            local data = Tools.Utils.LoadData()
-            local pending = data.PendingItems or {} -- Lấy danh sách nợ
-            
-            if #pending > 0 then
-                local newPending = {}
-                local boughtSomething = false
+            task.wait(30)
+            -- Bọc trong pcall để tránh lỗi ngầm làm crash luồng
+            pcall(function()
+                local data = Tools.Utils.LoadData()
+                local pending = data.PendingItems or {}
                 
-                for _, itemData in ipairs(pending) do
-                    -- Kiểm tra xem đủ điều kiện mua chưa (Tiền + Nguyên liệu)
-                    local check = Tools.Shop.CheckRequirements(itemData.Item, Tools.Player)
+                if #pending > 0 then
+                    local newPending = {}
+                    local boughtSomething = false
                     
-                    if check.CanBuy then
-                        -- ĐỦ ĐIỀU KIỆN -> MUA NGAY
-                        Tools.Log("⚡ Background Buy: " .. itemData.Item, Color3.fromRGB(0, 255, 0))
+                    for _, itemData in ipairs(pending) do
+                        local check = Tools.Shop.CheckRequirements(itemData.Item, Tools.Player)
                         
-                        -- Tạm dừng Farm 1 chút để mua cho an toàn
-                        Tools.Farm.StopFarm()
-                        task.wait(0.5)
-                        
-                        -- Gửi lệnh mua
-                        ReplicatedStorage.Events.ItemPackageEvent:InvokeServer("Purchase", {
-                            ["Type"] = itemData.Item, 
-                            ["Category"] = itemData.Category
-                        })
-                        
-                        task.wait(1)
-                        boughtSomething = true
-                    else
-                        -- Vẫn chưa đủ -> Giữ lại trong danh sách nợ
-                        table.insert(newPending, itemData)
+                        if check.CanBuy then
+                            Tools.Log("⚡ Background Buy: " .. itemData.Item, Color3.fromRGB(0, 255, 0))
+                            Tools.Farm.StopFarm()
+                            task.wait(0.5)
+                            
+                            -- Mua bằng module ShopUtils mới (CheckAndBuy hoặc Buy)
+                            -- Ở đây dùng invoke trực tiếp như logic cũ của bạn
+                            ReplicatedStorage.Events.ItemPackageEvent:InvokeServer("Purchase", {
+                                ["Type"] = itemData.Item, 
+                                ["Category"] = itemData.Category
+                            })
+                            
+                            task.wait(1)
+                            boughtSomething = true
+                        else
+                            table.insert(newPending, itemData)
+                        end
+                    end
+                    
+                    if boughtSomething or #newPending ~= #pending then
+                        Tools.Utils.SaveData("PendingItems", newPending)
+                        if #newPending == 0 then
+                            Tools.Log("🎉 All Skipped Items Cleared!", Color3.fromRGB(0, 255, 0))
+                        end
                     end
                 end
-                
-                -- Cập nhật lại danh sách nợ mới
-                if boughtSomething or #newPending ~= #pending then
-                    Tools.Utils.SaveData("PendingItems", newPending)
-                    if #newPending == 0 then
-                        Tools.Log("🎉 All Skipped Items Cleared!", Color3.fromRGB(0, 255, 0))
-                    end
-                end
-            end
+            end)
         end
     end)
 end
@@ -122,22 +124,24 @@ end
 -- ====================================================
 task.spawn(function()
     task.wait(1)
-    Log("Loading Core Modules...", Color3.fromRGB(255, 255, 0))
+    Log("🚀 Starting Main Thread...", Color3.fromRGB(0, 255, 255))
 
-    -- Tải Modules
+    -- Tải Modules (Bao gồm cả PlaceEgg ở đây để đảm bảo LoadModule đã tồn tại)
     local Utilities   = LoadModule("Utilities.lua")
     local PlayerUtils = LoadModule("PlayerUtils.lua")
     local ShopUtils   = LoadModule("ShopUtils.lua")
     local TokenData   = LoadModule("TokenData.lua")
     local FieldData   = LoadModule("FieldData.lua")
     local AutoFarm    = LoadModule("AutoFarm.lua")
+    local PlaceEgg    = LoadModule("PlaceEgg.lua") -- Đã di chuyển xuống đây
 
-    if not (Utilities and PlayerUtils and ShopUtils and TokenData and FieldData and AutoFarm) then
-        Log("❌ STOP: Failed to load core modules!", Color3.fromRGB(255, 0, 0))
+    -- Kiểm tra module chết
+    if not (Utilities and PlayerUtils and ShopUtils and TokenData and FieldData and AutoFarm and PlaceEgg) then
+        Log("❌ CRITICAL: One or more modules failed to load!", Color3.fromRGB(255, 0, 0))
         return
     end
 
-    -- Đóng gói công cụ (Tools Box)
+    -- Đóng gói Tools
     local Tools = {
         Log = Log,
         Utils = Utilities,
@@ -152,7 +156,7 @@ task.spawn(function()
     local SaveData = Utilities.LoadData()
     Log("Welcome back, " .. LocalPlayer.Name, Color3.fromRGB(100, 255, 100))
 
-    -- A. NHỮNG VIỆC CƠ BẢN (CHẠY 1 LẦN)
+    -- A. Claim Hive
     if not SaveData.HiveClaimed then
         local ClaimHive = LoadModule("ClaimHive.lua")
         if ClaimHive and ClaimHive.Run(Log, task.wait, Utilities) then
@@ -160,53 +164,44 @@ task.spawn(function()
         end
     end
 
+    -- B. Redeem Code
     if not SaveData.RedeemDone then
         local RedeemCode = LoadModule("RedeemCode.lua")
         if RedeemCode then RedeemCode.Run(Log, task.wait, Utilities) end
     end
 
-    -- B. CHẠY STARTER (NẾU CHƯA XONG)
+    -- C. Chạy Starter Quest
     if not SaveData.StarterDone then
-        local Starter = LoadModule("Starter.lua") -- Tải Starter V4
+        local Starter = LoadModule("Starter.lua")
         if Starter then
-            Starter.Run(Tools) -- Chạy xong Starter mới đi tiếp
+            Starter.Run(Tools)
         end
     else
         Log("✅ Starter Previously Completed.", Color3.fromRGB(0, 255, 0))
     end
 
-    -- C. KÍCH HOẠT CHẾ ĐỘ CHECK NGẦM (MULTITASKING)
+    -- D. Chạy Check Ngầm
     StartBackgroundCheck(Tools)
 
-    -- D. VÒNG LẶP FARM VĨNH VIỄN (Logic Động hoàn toàn)
-    Log("🚀 Entering Permanent Farm Loop...", Color3.fromRGB(0, 255, 255))
-    
-    local targetMaterial = "Honey" -- Mặc định là Honey
-    local lastField = "" -- Dùng để kiểm tra xem có thay đổi field không
+    -- E. Farm Loop
+    Log("🚜 Main Farm Loop Started", Color3.fromRGB(0, 255, 255))
+    local targetMaterial = "Honey"
+    local lastField = ""
 
     while true do
-        -- 1. Gọi FieldData để lấy cánh đồng tốt nhất (Dựa trên số ong hiện tại)
-        -- Logic: FieldData tự check Bees -> Trả về Field ngon nhất (Sunflower, Bamboo, Pine...)
         local bestField, fieldInfo = Tools.Field.GetBestFieldForMaterial(targetMaterial)
         
         if bestField and fieldInfo then
-            -- Chỉ log khi đổi địa điểm
             if lastField ~= bestField then
-                Tools.Log("📍 Farming optimized for Honey at: " .. bestField, Color3.fromRGB(255, 255, 0))
+                Tools.Log("📍 Farming at: " .. bestField, Color3.fromRGB(255, 255, 0))
                 lastField = bestField
             end
             
-            -- 2. Gửi lệnh cho AutoFarm
-            -- AutoFarm sẽ tự xử lý việc bay đến Position và Size lấy từ fieldInfo (nếu Module AutoFarm hỗ trợ)
-            -- Hoặc chỉ cần gửi tên field nếu AutoFarm tự tra cứu lại.
-            Tools.Farm.StartFarm(bestField, Tools.Log, Tools.Utils)
-            
+            Tools.Farm.StartFarm(bestField, Tools)
         else
-            Tools.Log("⚠️ No suitable field found for Honey logic!", Color3.fromRGB(255, 0, 0))
+            Tools.Log("⚠️ Finding best field...", Color3.fromRGB(255, 100, 100))
         end
         
-        -- Check lại mỗi 5 giây để đảm bảo nếu user mua thêm ong, 
-        -- vòng lặp sau FieldData sẽ tự trả về cánh đồng mới xịn hơn.
         task.wait(5)
     end
 end)
