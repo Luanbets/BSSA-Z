@@ -1,5 +1,5 @@
 -- ====================================================
--- AUTO BEE SWARM - ZERO TOUCH (MANAGER V4 - FINAL)
+-- AUTO BEE SWARM - ZERO TOUCH (MANAGER V6 - FINAL HIVE FIX)
 -- Created for: Luận
 -- ====================================================
 local Players = game:GetService("Players")
@@ -11,7 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- 1. CẤU HÌNH REPO
 local REPO_URL = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/"
 
--- 2. HỆ THỐNG LOG
+-- 2. HỆ THỐNG LOG & UI (2 DÒNG)
 local uiName = "BSSA_Manager_UI"
 if CoreGui:FindFirstChild(uiName) then CoreGui[uiName]:Destroy() end
 
@@ -19,61 +19,66 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = uiName
 if pcall(function() screenGui.Parent = CoreGui end) then else screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
-local logLabel = Instance.new("TextLabel", screenGui)
-logLabel.Size = UDim2.new(0.5, 0, 0, 40)
-logLabel.Position = UDim2.new(0.25, 0, 0, 0)
-logLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-logLabel.BackgroundTransparency = 0.5
-logLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-logLabel.TextSize = 18
-logLabel.Font = Enum.Font.GothamBold
-logLabel.Text = "Initializing BSSA-Z..."
+-- Khung chứa
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0.5, 0, 0, 60) 
+mainFrame.Position = UDim2.new(0.25, 0, 0, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+mainFrame.BackgroundTransparency = 0.6
+mainFrame.BorderSizePixel = 0
 
+-- Dòng 1: Trạng thái (Status)
+local statusLabel = Instance.new("TextLabel", mainFrame)
+statusLabel.Size = UDim2.new(1, 0, 0.5, 0)
+statusLabel.Position = UDim2.new(0, 0, 0, 0)
+statusLabel.BackgroundTransparency = 1
+statusLabel.TextColor3 = Color3.fromRGB(255, 255, 0) -- Vàng
+statusLabel.TextSize = 16
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.Text = "Status: Idle"
+
+-- Dòng 2: Log chi tiết (Quest/Honey)
+local logLabel = Instance.new("TextLabel", mainFrame)
+logLabel.Size = UDim2.new(1, 0, 0.5, 0)
+logLabel.Position = UDim2.new(0, 0, 0.5, 0)
+logLabel.BackgroundTransparency = 1
+logLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- Trắng
+logLabel.TextSize = 14
+logLabel.Font = Enum.Font.Gotham
+logLabel.Text = "Initializing..."
+
+-- Hàm Log thông minh
 local function Log(text, color)
-    if logLabel then
+    if string.find(text, "Farming at") or string.find(text, "Status:") or string.find(text, "Checking Hive") then
+        statusLabel.Text = text:gsub("🚜 ", ""):gsub("📍 ", ""):gsub("🏠 ", "")
+    else
         logLabel.Text = text
-        logLabel.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+        if color then logLabel.TextColor3 = color end
     end
     print("[BSSA]: " .. text)
 end
 
--- 3. HÀM TẢI MODULE (DEBUG CHI TIẾT)
+-- 3. HÀM TẢI MODULE
 local function LoadModule(scriptName)
     Log("📥 Downloading: " .. scriptName .. "...", Color3.fromRGB(255, 255, 0))
-    
     local url = REPO_URL .. scriptName .. "?t=" .. tostring(tick())
     local success, content = pcall(function() return game:HttpGet(url) end)
     
-    if not success or type(content) ~= "string" then
-        Log("❌ LỖI TẢI (HTTP Fail): " .. scriptName, Color3.fromRGB(255, 80, 80))
-        warn("[BSSA DEBUG] URL: " .. url)
-        return nil
-    end
-
+    if not success or type(content) ~= "string" then return nil end
     local func, loadErr = loadstring(content)
-    if not func then
-        Log("❌ LỖI CÚ PHÁP (Syntax): " .. scriptName, Color3.fromRGB(255, 80, 80))
-        warn("[BSSA DEBUG] Error: " .. tostring(loadErr))
-        return nil
-    end
-
+    if not func then return nil end
     local runSuccess, module = pcall(func)
-    if not runSuccess then
-        Log("❌ LỖI CHẠY (Runtime): " .. scriptName, Color3.fromRGB(255, 80, 80))
-        warn("[BSSA DEBUG] Error: " .. tostring(module))
-        return nil
-    end
+    if not runSuccess then return nil end
     
     Log("✅ Loaded: " .. scriptName, Color3.fromRGB(0, 255, 0))
     return module
 end
 
 -- ====================================================
--- 4. BACKGROUND CHECK
+-- 4. BACKGROUND CHECK (MUA ĐỒ NGẦM)
 -- ====================================================
 local function StartBackgroundCheck(Tools)
     task.spawn(function()
-        Log("🕵️ Background Check Active", Color3.fromRGB(150, 150, 150))
         while true do
             task.wait(30)
             pcall(function()
@@ -83,7 +88,7 @@ local function StartBackgroundCheck(Tools)
                     local newPending = {}
                     local bought = false
                     for _, itemData in ipairs(pending) do
-                        local check = Tools.Shop.CheckAndBuy(itemData.Item, Tools.Player, nil) -- Gọi CheckAndBuy mới
+                        local check = Tools.Shop.CheckAndBuy(itemData.Item, Tools.Player, nil)
                         if check.Purchased then
                             Tools.Log("⚡ Background Buy: " .. itemData.Item, Color3.fromRGB(0, 255, 0))
                             bought = true
@@ -116,31 +121,39 @@ task.spawn(function()
     local PlaceEgg    = LoadModule("PlaceEgg.lua")
 
     if not (Utilities and PlayerUtils and ShopUtils and TokenData and FieldData and AutoFarm and PlaceEgg) then
-        Log("❌ CRITICAL: Thiếu Module quan trọng! Kiểm tra Console (F9).", Color3.fromRGB(255, 0, 0))
+        Log("❌ CRITICAL: Thiếu Module!", Color3.fromRGB(255, 0, 0))
         return
     end
 
-    local Tools = {
-        Log = Log,
-        Utils = Utilities,
-        Player = PlayerUtils,
-        Shop = ShopUtils,
-        Farm = AutoFarm,
-        Field = FieldData,
-        Token = TokenData,
-        Hatch = PlaceEgg
-    }
-
+    local Tools = { Log = Log, Utils = Utilities, Player = PlayerUtils, Shop = ShopUtils, Farm = AutoFarm, Field = FieldData, Token = TokenData, Hatch = PlaceEgg }
     local SaveData = Utilities.LoadData()
     Log("Welcome back, " .. LocalPlayer.Name, Color3.fromRGB(100, 255, 100))
 
-    if not SaveData.HiveClaimed then
-        local ClaimHive = LoadModule("ClaimHive.lua")
-        if ClaimHive and ClaimHive.Run(Log, task.wait, Utilities) then
-            Utilities.SaveData("HiveClaimed", true)
+    -- ============================================================
+    -- A. LOGIC BẮT BUỘC: CHECK & CLAIM HIVE
+    -- ============================================================
+    -- [UPDATE] Không check SaveData nữa. Luôn luôn chạy kiểm tra thực tế.
+    local ClaimHive = LoadModule("ClaimHive.lua")
+    if ClaimHive then
+        Log("🏠 Verifying Hive Ownership...", Color3.fromRGB(255, 255, 0))
+        
+        local hasHive = false
+        while not hasHive do
+            -- Hàm Run sẽ trả về true nếu: 1. Đã có tổ (Owner là mình) HOẶC 2. Nhận tổ thành công.
+            if ClaimHive.Run(Log, task.wait, Utilities) then
+                hasHive = true
+                Log("✅ Hive Confirmed!", Color3.fromRGB(0, 255, 0))
+                -- [UPDATE] KHÔNG LƯU 'HiveClaimed' VÀO FILE NỮA
+            else
+                Log("⚠️ No Empty Hive! Retrying in 5s...", Color3.fromRGB(255, 100, 100))
+                task.wait(5)
+            end
         end
     end
 
+    -- ============================================================
+    -- B. CÁC MODULE KHÁC (Redeem & Starter vẫn lưu vì làm 1 lần là xong vĩnh viễn)
+    -- ============================================================
     if not SaveData.RedeemDone then
         local RedeemCode = LoadModule("RedeemCode.lua")
         if RedeemCode then RedeemCode.Run(Log, task.wait, Utilities) end
@@ -155,6 +168,9 @@ task.spawn(function()
 
     StartBackgroundCheck(Tools)
 
+    -- ============================================================
+    -- C. VÒNG LẶP FARM CHÍNH
+    -- ============================================================
     Log("🚜 Main Farm Loop Started", Color3.fromRGB(0, 255, 255))
     local targetMaterial = "Honey"
     local lastField = ""
@@ -163,7 +179,7 @@ task.spawn(function()
         local bestField, fieldInfo = Tools.Field.GetBestFieldForMaterial(targetMaterial)
         if bestField and fieldInfo then
             if lastField ~= bestField then
-                Tools.Log("📍 Farming at: " .. bestField, Color3.fromRGB(255, 255, 0))
+                Tools.Log("📍 Farming at " .. bestField, Color3.fromRGB(255, 255, 0))
                 lastField = bestField
             end
             Tools.Farm.StartFarm(bestField, Tools)
