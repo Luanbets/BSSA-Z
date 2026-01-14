@@ -6,13 +6,9 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 -- [RAM ONLY] Biến này sẽ mất khi tắt script hoặc disconnect
--- Tuyệt đối không lưu vào file Save
 local CachedEggPrice = nil 
 
--- ==============================================================================
--- 1. BẢNG GIÁ TRỨNG CỐ ĐỊNH (DATA CỨNG)
--- [Giá_Hiện_Tại] = {Giá_Tiếp_Theo, Số_Thứ_Tự_Trứng}
--- ==============================================================================
+-- BẢNG GIÁ TRỨNG CỐ ĐỊNH (DATA CỨNG)
 local EggData = {
     [1000]      = {Next = 2500,     Index = 1},
     [2500]      = {Next = 4250,     Index = 2},
@@ -38,11 +34,8 @@ local EggData = {
     [10000000]  = {Next = 10000000, Index = 22}
 }
 
--- ==============================================================================
--- 2. BẢNG GIÁ ITEM (ĐÃ CẬP NHẬT ĐẦY ĐỦ)
--- ==============================================================================
+-- BẢNG GIÁ ITEM (ĐÃ CẬP NHẬT)
 local ShopData = {
-    -- Collectors
     ["Rake"]           = { Price = 800,       Type = "Collector", Category = "Collector" },
     ["Clippers"]       = { Price = 2200,      Type = "Collector", Category = "Collector" },
     ["Magnet"]         = { Price = 5500,      Type = "Collector", Category = "Collector" },
@@ -52,8 +45,6 @@ local ShopData = {
     ["Electro-Magnet"] = { Price = 300000,    Type = "Collector", Category = "Collector" },
     ["Scissors"]       = { Price = 850000,    Type = "Collector", Category = "Collector" },
     ["Honey Dipper"]   = { Price = 1500000,   Type = "Collector", Category = "Collector" },
-
-    -- Containers
     ["Jar"]            = { Price = 650,       Type = "Container", Category = "Accessory" },
     ["Backpack"]       = { Price = 5500,      Type = "Container", Category = "Accessory" },
     ["Canister"]       = { Price = 22000,     Type = "Container", Category = "Accessory" },
@@ -61,8 +52,6 @@ local ShopData = {
     ["Compressor"]     = { Price = 160000,    Type = "Container", Category = "Accessory" },
     ["Elite Barrel"]   = { Price = 650000,    Type = "Container", Category = "Accessory" },
     ["Port-O-Hive"]    = { Price = 1250000,   Type = "Container", Category = "Accessory" },
-
-    -- Accessories
     ["Helmet"]         = { Price = 30000,     Type = "Accessory", Category = "Accessory", Ingredients = { ["Pineapple"] = 5, ["MoonCharm"] = 1 } },
     ["Belt Pocket"]    = { Price = 14000,     Type = "Accessory", Category = "Accessory", Ingredients = { ["SunflowerSeed"] = 10 } },
     ["Basic Boots"]    = { Price = 4400,      Type = "Accessory", Category = "Accessory", Ingredients = { ["SunflowerSeed"] = 3, ["Blueberry"] = 3 } },
@@ -102,18 +91,21 @@ local function ToggleShopUI()
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 end
 
--- ==============================================================================
--- 3. HÀM CHECK INDEX TRỨNG (Dùng cho Starter để Skip nhiệm vụ)
--- ==============================================================================
+-- [HÀM MỚI] Kiểm tra xem đã sở hữu Item chưa (Fix lỗi loop mua)
+local function HasItem(itemName)
+    -- Check 1: Trong balo (Tool chưa trang bị)
+    if LocalPlayer.Backpack:FindFirstChild(itemName) then return true end
+    -- Check 2: Đang cầm hoặc trang bị trên người (Character)
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(itemName) then return true end
+    return false
+end
+
 function module.GetCurrentEggIndex(LogFunc)
-    -- Nếu RAM chưa có giá (Mới chạy lại script) -> Đi soi UI 1 lần duy nhất
     if not CachedEggPrice then
         if LogFunc then LogFunc("🔍 Chưa có giá (Reset RAM). Đang soi UI...", Color3.fromRGB(255, 255, 0)) end
-        
         Utils.Tween(CFrame.new(-137, 4, 244))
         task.wait(0.5)
         ToggleShopUI()
-        
         local price = 0
         local startTime = tick()
         while tick() - startTime < 8 do
@@ -127,19 +119,15 @@ function module.GetCurrentEggIndex(LogFunc)
         end
         task.wait(0.5)
         ToggleShopUI()
-        
         if price > 0 then
             CachedEggPrice = price
             if LogFunc then LogFunc("✅ Đã lấy giá gốc vào RAM: " .. price, Color3.fromRGB(0, 255, 0)) end
         end
     end
-
-    -- Tra bảng cứng để xem đang ở trứng số mấy
     if CachedEggPrice and EggData[CachedEggPrice] then
         return EggData[CachedEggPrice].Index
     end
-    
-    return 0 -- Không xác định
+    return 0 
 end
 
 local function TryPurchase(itemName, category, PlayerUtils)
@@ -154,33 +142,25 @@ end
 
 function module.CheckAndBuy(itemName, PlayerUtils, LogFunc)
     -- ==========================================
-    -- A. BASIC EGG (LOGIC RAM & DỰ ĐOÁN)
+    -- A. BASIC EGG
     -- ==========================================
     if itemName == "Basic Egg" then
-        if not CachedEggPrice then 
-            module.GetCurrentEggIndex(LogFunc) -- Tự động đi soi nếu chưa có
-        end
-
+        if not CachedEggPrice then module.GetCurrentEggIndex(LogFunc) end
         local myHoney = PlayerUtils.GetHoney()
-        
         if myHoney < CachedEggPrice then
             return { Purchased = false, MissingHoney = CachedEggPrice - myHoney, Price = CachedEggPrice }
         else
             if LogFunc then LogFunc("💰 Mua trứng giá: " .. CachedEggPrice, Color3.fromRGB(0, 255, 0)) end
-            
             Utils.Tween(CFrame.new(-137, 4, 244))
             task.wait(0.5)
-            
             local success = TryPurchase("Basic Egg", "Eggs", PlayerUtils)
-            
             if success then
-                -- [LOGIC CHÍNH] Mua xong -> Tra bảng -> Cập nhật RAM (Không lưu file)
                 local data = EggData[CachedEggPrice]
                 if data then
                     CachedEggPrice = data.Next
-                    if LogFunc then LogFunc("🔮 Giá tiếp theo (Dự đoán): " .. CachedEggPrice, Color3.fromRGB(0, 255, 255)) end
+                    if LogFunc then LogFunc("🔮 Giá tiếp theo: " .. CachedEggPrice, Color3.fromRGB(0, 255, 255)) end
                 else
-                    CachedEggPrice = nil -- Lỗi lạ -> Reset để lần sau check lại
+                    CachedEggPrice = nil 
                 end
                 return { Purchased = true }
             else
@@ -190,10 +170,16 @@ function module.CheckAndBuy(itemName, PlayerUtils, LogFunc)
     end
 
     -- ==========================================
-    -- B. ITEM THƯỜNG
+    -- B. ITEM THƯỜNG (Đã Fix Loop)
     -- ==========================================
     local data = ShopData[itemName]
     if not data then return { Purchased = false, Error = "NoData" } end
+
+    -- [FIX LOOP] Kiểm tra xem có chưa TRƯỚC khi mua
+    if HasItem(itemName) then
+        if LogFunc then LogFunc("✅ Đã có item: " .. itemName .. ". Bỏ qua!", Color3.fromRGB(0, 255, 0)) end
+        return { Purchased = true } -- Trả về True để Starter biết mà skip
+    end
 
     local myHoney = PlayerUtils.GetHoney()
     if myHoney < data.Price then
@@ -209,6 +195,15 @@ function module.CheckAndBuy(itemName, PlayerUtils, LogFunc)
 
     if LogFunc then LogFunc("🛒 Mua vật phẩm: " .. itemName, Color3.fromRGB(0, 255, 0)) end
     local success = TryPurchase(itemName, data.Category, PlayerUtils)
+    
+    -- [FAILSAFE] Nếu mua thất bại nhưng tiền vẫn còn nguyên (và > giá),
+    -- rất có thể do đã sở hữu mà hàm HasItem không tìm thấy hoặc lag.
+    -- Ta trả về True luôn để tránh kẹt loop vô tận.
+    if not success and myHoney >= data.Price then
+        if LogFunc then LogFunc("⚠️ Mua không trừ tiền (Có thể đã có). Skip luôn!", Color3.fromRGB(255, 170, 0)) end
+        return { Purchased = true }
+    end
+
     return { Purchased = success }
 end
 
