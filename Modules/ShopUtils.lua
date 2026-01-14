@@ -5,28 +5,91 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Biến lưu giá trứng tạm thời (RAM)
+-- [RAM ONLY] Biến này sẽ mất khi tắt script hoặc disconnect
+-- Tuyệt đối không lưu vào file Save
 local CachedEggPrice = nil 
 
--- LOAD UTILITIES AN TOÀN
+-- ==============================================================================
+-- 1. BẢNG GIÁ TRỨNG CỐ ĐỊNH (DATA CỨNG)
+-- [Giá_Hiện_Tại] = {Giá_Tiếp_Theo, Số_Thứ_Tự_Trứng}
+-- ==============================================================================
+local EggData = {
+    [1000]      = {Next = 2500,     Index = 1},
+    [2500]      = {Next = 4250,     Index = 2},
+    [4250]      = {Next = 6708,     Index = 3},
+    [6708]      = {Next = 10313,    Index = 4},
+    [10313]     = {Next = 15669,    Index = 5},
+    [15669]     = {Next = 23670,    Index = 6},
+    [23670]     = {Next = 35648,    Index = 7},
+    [35648]     = {Next = 53596,    Index = 8},
+    [53596]     = {Next = 80506,    Index = 9},
+    [80506]     = {Next = 120858,   Index = 10},
+    [120858]    = {Next = 181378,   Index = 11},
+    [181378]    = {Next = 272151,   Index = 12},
+    [272151]    = {Next = 408304,   Index = 13},
+    [408304]    = {Next = 612527,   Index = 14},
+    [612527]    = {Next = 918857,   Index = 15},
+    [918857]    = {Next = 1378348,  Index = 16},
+    [1378348]   = {Next = 2067580,  Index = 17},
+    [2067580]   = {Next = 3101426,  Index = 18},
+    [3101426]   = {Next = 4652191,  Index = 19},
+    [4652191]   = {Next = 6978337,  Index = 20},
+    [6978337]   = {Next = 10000000, Index = 21},
+    [10000000]  = {Next = 10000000, Index = 22}
+}
+
+-- ==============================================================================
+-- 2. BẢNG GIÁ ITEM (ĐÃ CẬP NHẬT ĐẦY ĐỦ)
+-- ==============================================================================
+local ShopData = {
+    -- Collectors
+    ["Rake"]           = { Price = 800,       Type = "Collector", Category = "Collector" },
+    ["Clippers"]       = { Price = 2200,      Type = "Collector", Category = "Collector" },
+    ["Magnet"]         = { Price = 5500,      Type = "Collector", Category = "Collector" },
+    ["Vacuum"]         = { Price = 14000,     Type = "Collector", Category = "Collector" },
+    ["Super-Scooper"]  = { Price = 40000,     Type = "Collector", Category = "Collector" },
+    ["Pulsar"]         = { Price = 125000,    Type = "Collector", Category = "Collector" },
+    ["Electro-Magnet"] = { Price = 300000,    Type = "Collector", Category = "Collector" },
+    ["Scissors"]       = { Price = 850000,    Type = "Collector", Category = "Collector" },
+    ["Honey Dipper"]   = { Price = 1500000,   Type = "Collector", Category = "Collector" },
+
+    -- Containers
+    ["Jar"]            = { Price = 650,       Type = "Container", Category = "Accessory" },
+    ["Backpack"]       = { Price = 5500,      Type = "Container", Category = "Accessory" },
+    ["Canister"]       = { Price = 22000,     Type = "Container", Category = "Accessory" },
+    ["Mega-Jug"]       = { Price = 50000,     Type = "Container", Category = "Accessory" },
+    ["Compressor"]     = { Price = 160000,    Type = "Container", Category = "Accessory" },
+    ["Elite Barrel"]   = { Price = 650000,    Type = "Container", Category = "Accessory" },
+    ["Port-O-Hive"]    = { Price = 1250000,   Type = "Container", Category = "Accessory" },
+
+    -- Accessories
+    ["Helmet"]         = { Price = 30000,     Type = "Accessory", Category = "Accessory", Ingredients = { ["Pineapple"] = 5, ["MoonCharm"] = 1 } },
+    ["Belt Pocket"]    = { Price = 14000,     Type = "Accessory", Category = "Accessory", Ingredients = { ["SunflowerSeed"] = 10 } },
+    ["Basic Boots"]    = { Price = 4400,      Type = "Accessory", Category = "Accessory", Ingredients = { ["SunflowerSeed"] = 3, ["Blueberry"] = 3 } },
+    ["Propeller Hat"]  = { Price = 2500000,   Type = "Accessory", Category = "Accessory", Ingredients = { ["Gumdrops"] = 25, ["Pineapple"] = 100, ["MoonCharm"] = 5 } },
+    ["Brave Guard"]    = { Price = 300000,    Type = "Accessory", Category = "Accessory", Ingredients = { ["Stinger"] = 3 } },
+    ["Hasty Guard"]    = { Price = 300000,    Type = "Accessory", Category = "Accessory", Ingredients = { ["MoonCharm"] = 5 } },
+    ["Bomber Guard"]   = { Price = 300000,    Type = "Accessory", Category = "Accessory", Ingredients = { ["SunflowerSeed"] = 25 } },
+    ["Looker Guard"]   = { Price = 300000,    Type = "Accessory", Category = "Accessory", Ingredients = { ["SunflowerSeed"] = 25 } },
+    ["Belt Bag"]       = { Price = 440000,    Type = "Accessory", Category = "Accessory", Ingredients = { ["Pineapple"] = 50, ["SunflowerSeed"] = 50, ["Stinger"] = 3 } },
+    ["Hiking Boots"]   = { Price = 2200000,   Type = "Accessory", Category = "Accessory", Ingredients = { ["Blueberry"] = 50, ["Strawberry"] = 50 } }
+}
+
+-- LOAD UTILITIES
 local Utils = nil
 local function LoadUtilsSafely()
     local url = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/Utilities.lua"
     local success, content = pcall(function() return game:HttpGet(url) end)
-    if not success then return nil end
-    local func, err = loadstring(content)
-    if not func then return nil end
-    local runSuccess, loadedModule = pcall(func)
-    return loadedModule
+    if success then 
+        local func = loadstring(content)
+        if func then 
+            local _, m = pcall(func)
+            return m
+        end
+    end
+    return nil
 end
 Utils = LoadUtilsSafely() or { Tween = function() end, SaveData = function() end, LoadData = function() return {} end }
-
--- [CHECK 1] Load giá cũ từ file Save ngay khi chạy script
--- Nếu đã từng check trước đó rồi thì dùng luôn, KHÔNG cần mở UI check lại
-local savedData = Utils.LoadData()
-if savedData.NextEggPrice and savedData.NextEggPrice > 0 then 
-    CachedEggPrice = savedData.NextEggPrice 
-end
 
 local function ParsePrice(text)
     local cleanStr = text:gsub("%D", "") 
@@ -39,59 +102,44 @@ local function ToggleShopUI()
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 end
 
-local ShopData = {
-    ["Basic Egg"] = {}, 
-    ["Rake"] = { Price = 800, Type = "Collector", Category = "Collector" },
-    ["Clippers"] = { Price = 2200, Type = "Collector", Category = "Collector" },
-    ["Magnet"] = { Price = 5500, Type = "Collector", Category = "Collector" },
-    ["Vacuum"] = { Price = 14000, Type = "Collector", Category = "Collector" },
-    ["Backpack"] = { Price = 5500, Type = "Container", Category = "Accessory" },
-    ["Canister"] = { Price = 22000, Type = "Container", Category = "Accessory" },
-    ["Belt Pocket"] = { Price = 14000, Type = "Accessory", Category = "Accessory", Ingredients = { ["SunflowerSeed"] = 10 } },
-    ["Basic Boots"] = { Price = 4400, Type = "Accessory", Category = "Accessory", Ingredients = { ["SunflowerSeed"] = 3, ["Blueberry"] = 3 } },
-    ["Propeller Hat"] = { Price = 2500000, Type = "Accessory", Category = "Accessory", Ingredients = { ["Gumdrops"] = 25, ["Pineapple"] = 100, ["MoonCharm"] = 5 } },
-}
-
--- [HÀM SOI GIÁ] Chỉ chạy khi chưa có giá
-local function FetchEggPriceFromShop(LogFunc)
-    if LogFunc then LogFunc("🏃 Đang check giá trứng lần đầu (UI)...", Color3.fromRGB(255, 255, 0)) end
-    
-    -- 1. Bay đến shop
-    Utils.Tween(CFrame.new(-137, 4, 244))
-    task.wait(0.5)
-    
-    -- 2. Mở UI
-    ToggleShopUI()
-    
-    local price = 0
-    local startTime = tick()
-    
-    -- 3. Đợi UI hiện ra và đọc số
-    while tick() - startTime < 8 do
-        local screenGui = PlayerGui:FindFirstChild("ScreenGui")
-        local itemCostLabel = screenGui and screenGui:FindFirstChild("Shop") and screenGui.Shop:FindFirstChild("ItemInfo") and screenGui.Shop.ItemInfo:FindFirstChild("ItemCost")
+-- ==============================================================================
+-- 3. HÀM CHECK INDEX TRỨNG (Dùng cho Starter để Skip nhiệm vụ)
+-- ==============================================================================
+function module.GetCurrentEggIndex(LogFunc)
+    -- Nếu RAM chưa có giá (Mới chạy lại script) -> Đi soi UI 1 lần duy nhất
+    if not CachedEggPrice then
+        if LogFunc then LogFunc("🔍 Chưa có giá (Reset RAM). Đang soi UI...", Color3.fromRGB(255, 255, 0)) end
         
-        if itemCostLabel and screenGui.Shop.Visible then
-            price = ParsePrice(itemCostLabel.Text)
-            if price > 0 then break end
+        Utils.Tween(CFrame.new(-137, 4, 244))
+        task.wait(0.5)
+        ToggleShopUI()
+        
+        local price = 0
+        local startTime = tick()
+        while tick() - startTime < 8 do
+            local screenGui = PlayerGui:FindFirstChild("ScreenGui")
+            local itemCostLabel = screenGui and screenGui:FindFirstChild("Shop") and screenGui.Shop:FindFirstChild("ItemInfo") and screenGui.Shop.ItemInfo:FindFirstChild("ItemCost")
+            if itemCostLabel and screenGui.Shop.Visible then
+                price = ParsePrice(itemCostLabel.Text)
+                if price > 0 then break end
+            end
+            task.wait(0.5)
         end
         task.wait(0.5)
+        ToggleShopUI()
+        
+        if price > 0 then
+            CachedEggPrice = price
+            if LogFunc then LogFunc("✅ Đã lấy giá gốc vào RAM: " .. price, Color3.fromRGB(0, 255, 0)) end
+        end
+    end
+
+    -- Tra bảng cứng để xem đang ở trứng số mấy
+    if CachedEggPrice and EggData[CachedEggPrice] then
+        return EggData[CachedEggPrice].Index
     end
     
-    -- 4. Đóng UI
-    task.wait(0.5)
-    ToggleShopUI()
-    task.wait(0.5)
-
-    if price > 0 then
-        CachedEggPrice = price
-        -- Lưu ngay vào file để lỡ crash game vào lại vẫn nhớ giá
-        Utils.SaveData("NextEggPrice", price)
-        if LogFunc then LogFunc("✅ Đã cập nhật giá trứng: " .. price, Color3.fromRGB(0, 255, 0)) end
-        return price
-    else
-        return 1000000000 -- Giá ảo nếu lỗi
-    end
+    return 0 -- Không xác định
 end
 
 local function TryPurchase(itemName, category, PlayerUtils)
@@ -106,37 +154,36 @@ end
 
 function module.CheckAndBuy(itemName, PlayerUtils, LogFunc)
     -- ==========================================
-    -- A. BASIC EGG (Xử lý thông minh)
+    -- A. BASIC EGG (LOGIC RAM & DỰ ĐOÁN)
     -- ==========================================
     if itemName == "Basic Egg" then
-        -- 1. Nếu chưa có giá (Cache = nil) -> Đi soi giá bằng UI (Lần đầu)
         if not CachedEggPrice then 
-            FetchEggPriceFromShop(LogFunc) 
+            module.GetCurrentEggIndex(LogFunc) -- Tự động đi soi nếu chưa có
         end
 
         local myHoney = PlayerUtils.GetHoney()
         
-        -- 2. So sánh tiền với giá đã lưu
         if myHoney < CachedEggPrice then
-            -- Chưa đủ tiền -> Trả về thông tin để đi farm tiếp
             return { Purchased = false, MissingHoney = CachedEggPrice - myHoney, Price = CachedEggPrice }
         else
-            -- Đủ tiền -> Đi mua (Dùng Remote, không cần UI)
-            if LogFunc then LogFunc("💰 Đủ tiền ("..myHoney.."/"..CachedEggPrice.."). Mua ngay!", Color3.fromRGB(0, 255, 0)) end
+            if LogFunc then LogFunc("💰 Mua trứng giá: " .. CachedEggPrice, Color3.fromRGB(0, 255, 0)) end
             
-            -- Bay ra shop cho chắc ăn (tránh bị lỗi vị trí)
             Utils.Tween(CFrame.new(-137, 4, 244))
             task.wait(0.5)
             
             local success = TryPurchase("Basic Egg", "Eggs", PlayerUtils)
             
             if success then
-                -- [QUAN TRỌNG] Mua xong -> Giá thay đổi -> Xóa giá cũ đi
-                CachedEggPrice = nil 
-                Utils.SaveData("NextEggPrice", nil)
+                -- [LOGIC CHÍNH] Mua xong -> Tra bảng -> Cập nhật RAM (Không lưu file)
+                local data = EggData[CachedEggPrice]
+                if data then
+                    CachedEggPrice = data.Next
+                    if LogFunc then LogFunc("🔮 Giá tiếp theo (Dự đoán): " .. CachedEggPrice, Color3.fromRGB(0, 255, 255)) end
+                else
+                    CachedEggPrice = nil -- Lỗi lạ -> Reset để lần sau check lại
+                end
                 return { Purchased = true }
             else
-                if LogFunc then LogFunc("❌ Lỗi mua trứng!", Color3.fromRGB(255, 0, 0)) end
                 return { Purchased = false }
             end
         end
