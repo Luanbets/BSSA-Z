@@ -5,6 +5,9 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+-- [NEW] Remote kiểm tra kho đồ từ Server
+local RetrieveStatsRemote = ReplicatedStorage:WaitForChild("Events", 5) and ReplicatedStorage.Events:WaitForChild("RetrievePlayerStats", 5)
+
 -- [RAM ONLY] Biến này sẽ mất khi tắt script hoặc disconnect
 local CachedEggPrice = nil 
 
@@ -91,13 +94,36 @@ local function ToggleShopUI()
     VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 end
 
--- [HÀM MỚI] Kiểm tra xem đã sở hữu Item chưa (Fix lỗi loop mua)
+-- [HÀM ĐÃ SỬA] Kiểm tra sở hữu Item từ Server (Silent Mode)
 local function HasItem(itemName)
-    -- Check 1: Trong balo (Tool chưa trang bị)
-    if LocalPlayer.Backpack:FindFirstChild(itemName) then return true end
-    -- Check 2: Đang cầm hoặc trang bị trên người (Character)
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(itemName) then return true end
-    return false
+    if not RetrieveStatsRemote then return false end
+
+    -- Gọi server lấy data (Chạy ngầm, không báo lỗi nếu fail)
+    local success, stats = pcall(function() 
+        return RetrieveStatsRemote:InvokeServer() 
+    end)
+
+    if not success or not stats then return false end
+
+    -- Chỉ quét 3 danh mục yêu cầu
+    local searchTargets = {
+        stats.Collectors,   -- Tool
+        stats.Backpacks,    -- Balo
+        stats.Accessories   -- Phụ kiện
+    }
+
+    for _, category in pairs(searchTargets) do
+        if type(category) == "table" then
+            -- Quét sạch (check cả Key lẫn Value để không sót)
+            for key, val in pairs(category) do
+                if tostring(key) == itemName or tostring(val) == itemName then
+                    return true -- Đã có hàng
+                end
+            end
+        end
+    end
+
+    return false -- Không tìm thấy
 end
 
 function module.GetCurrentEggIndex(LogFunc)
