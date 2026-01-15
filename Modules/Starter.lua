@@ -20,6 +20,13 @@ local ACTION_LIST = {
     [10]= {Type = "BuyItem", Item = "Propeller Hat", Category = "Accessory"},
 }
 
+-- [HÀM MỚI] Tự động chọn cánh đồng ngon nhất dựa trên số ong hiện có
+local function GetSmartField(Tools)
+    -- Hỏi FieldData xem map nào ngon nhất cho Honey
+    local bestField, _ = Tools.Field.GetBestFieldForMaterial("Honey")
+    return bestField or "Sunflower Field" -- Nếu lỗi thì về Sunflower
+end
+
 function module.Run(Tools)
     local Log = Tools.Log
     local Utils = Tools.Utils
@@ -33,7 +40,6 @@ function module.Run(Tools)
     
     local currentStep = savedData.StarterStep or 1
     local SkippedItems = savedData.PendingItems or {}
-    local FARM_DEFAULT = "Sunflower Field"
     
     -- Tính toán số slot ong dự kiến dựa trên các bước trước đó
     local expectedHiveSlots = 1 -- Mặc định có 1 con (Free Egg)
@@ -48,25 +54,24 @@ function module.Run(Tools)
         Farm.StopFarm()
         task.wait(1)
         Hatch.Run("Basic", 1)
-        task.wait(5)
+        task.wait(5) -- Đợi ong nở animation
+        
+        -- [CHECK NGAY] In ra số ong hiện tại sau khi nở
+        local realBees = Player.GetBeeCount()
+        Log("✅ Số ong hiện tại: " .. realBees, Color3.fromRGB(0, 255, 0))
     end
 
-    -- [LOGIC QUAN TRỌNG] Mua trứng thông minh (Check giá để Skip + Hiển thị tiến độ)
+    -- [LOGIC QUAN TRỌNG] Mua trứng thông minh
     local function Action_BuyAndHatch(amount)
         local targetSlots = expectedHiveSlots + amount
         Log("🐝 Quest: Nhiệm vụ mua " .. amount .. " trứng...", Color3.fromRGB(0, 255, 255))
         
         while true do
-            -- 1. Lấy Index trứng hiện tại (Shop sẽ tự check UI hoặc lấy từ RAM)
+            -- 1. Lấy Index trứng hiện tại
             local currentEggIndex = Shop.GetCurrentEggIndex(Log)
-            
-            -- [MỚI] TÍNH TOÁN HIỂN THỊ TIẾN ĐỘ "ĐÃ MUA n/n"
-            -- currentEggIndex = 1 nghĩa là đang mua trứng thứ 1 (đã có 0)
-            -- currentOwned = currentEggIndex - 1
             local currentOwned = currentEggIndex - 1
             local boughtCount = currentOwned - expectedHiveSlots
             
-            -- Xử lý hiển thị cho đẹp (tránh số âm hoặc lố)
             if boughtCount < 0 then boughtCount = 0 end
             if boughtCount > amount then boughtCount = amount end
             
@@ -74,7 +79,7 @@ function module.Run(Tools)
 
             -- 2. SO SÁNH VỚI MỤC TIÊU
             if currentEggIndex > targetSlots then
-                Log("⏩ Đã đủ trứng (Check theo giá). Skip!", Color3.fromRGB(0, 255, 0))
+                Log("⏩ Đã đủ trứng. Skip!", Color3.fromRGB(0, 255, 0))
                 break
             end
             
@@ -87,11 +92,18 @@ function module.Run(Tools)
                 task.wait(2)
                 Hatch.Run("Basic", 1)
                 task.wait(5)
-                -- Loop lại để check giá mới và cập nhật log "Đã mua n/n"
+                
+                -- [CHECK NGAY] Cập nhật lại số ong sau khi nở
+                local realBees = Player.GetBeeCount()
+                Log("✅ Số ong thực tế: " .. realBees, Color3.fromRGB(50, 255, 50))
             else
                 local current = Player.GetHoney()
                 local target = result.Price or (current + (result.MissingHoney or 0))
-                Farm.FarmUntil(target, FARM_DEFAULT, Tools)
+                
+                -- [SỬA LỖI] Dùng GetSmartField thay vì FARM_DEFAULT
+                local bestMap = GetSmartField(Tools)
+                Log("💰 Cày tiền ở: " .. bestMap .. " (Mục tiêu: " .. target .. ")", Color3.fromRGB(255, 170, 0))
+                Farm.FarmUntil(target, bestMap, Tools)
             end
         end
         
@@ -116,7 +128,11 @@ function module.Run(Tools)
                 if action.Category == "Collector" then
                      local current = Player.GetHoney()
                      local target = result.Price or 0
-                     Farm.FarmUntil(target, FARM_DEFAULT, Tools)
+                     
+                     -- [SỬA LỖI] Dùng GetSmartField thay vì FARM_DEFAULT
+                     local bestMap = GetSmartField(Tools)
+                     Log("💰 Cày tiền ở: " .. bestMap .. " để mua " .. itemName, Color3.fromRGB(255, 170, 0))
+                     Farm.FarmUntil(target, bestMap, Tools)
                 else
                      Log("⏭️ Skip " .. itemName, Color3.fromRGB(255, 80, 80))
                      table.insert(SkippedItems, action)
