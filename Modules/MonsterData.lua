@@ -4,22 +4,22 @@ local MonsterData = {}
 -- 1. CẤU HÌNH THỜI GIAN HỒI SINH (Cooldowns)
 -- ==============================================================================
 local MobCooldowns = {
-    ["Ladybug"]      = 300,
-    ["Rhino Beetle"] = 300,
-    ["Spider"]       = 1800,
-    ["Scorpion"]     = 1800,
-    ["Mantis"]       = 1800,
-    ["Werewolf"]     = 3600,
+    ["Ladybug"]      = 300,    -- 5 Phút
+    ["Rhino Beetle"] = 300,    -- 5 Phút
+    ["Spider"]       = 1800,   -- 30 Phút
+    ["Scorpion"]     = 1800,   -- 30 Phút
+    ["Mantis"]       = 1800,   -- 30 Phút
+    ["Werewolf"]     = 3600,   -- 1 Tiếng
     ["Default"]      = 300
 }
 
 -- ==============================================================================
--- 2. DANH SÁCH QUÁI VẬT (RAW DATA)
+-- 2. DANH SÁCH QUÁI VẬT (RAW LIST)
 -- ==============================================================================
--- Chỉ cần khai báo: Tên quái, Loại quái, và Cánh đồng nó thuộc về.
--- Script sẽ tự tra cứu FieldData để biết nó ở đâu và cần bao nhiêu ong.
+-- Chỉ cần khai báo tên và cánh đồng. 
+-- Mọi thông tin tọa độ sẽ lấy từ FieldData để đảm bảo đồng nhất.
 local RawMobList = {
-    -- [ZONE 0 - STARTER]
+    -- [ZONE 0]
     {Name = "MushroomBush",     Type = "Ladybug",      Field = "Mushroom Field"},
     {Name = "Rhino Cave 1",     Type = "Rhino Beetle", Field = "Blue Flower Field"},
     {Name = "Ladybug Bush",     Type = "Ladybug",      Field = "Clover Field"},
@@ -45,49 +45,57 @@ local RawMobList = {
 }
 
 -- ==============================================================================
--- 3. HÀM XỬ LÝ THÔNG MINH (Dynamic Check)
+-- 3. HÀM TÍNH TOÁN (LOGIC MỚI KHỚP VỚI FIELD DATA)
 -- ==============================================================================
 
--- Hàm tính bán kính ước lượng dựa trên kích thước cánh đồng (Để thay thế số thủ công)
-local function CalculateRadius(sizeVector)
-    -- Lấy cạnh nhỏ nhất chia 2 hoặc lấy trung bình, ở đây lấy trung bình X và Z cho rộng rãi
-    return (sizeVector.X + sizeVector.Z) / 4 + 10 -- Cộng thêm chút dư để bao quát
+-- Hàm tính bán kính dựa trên Size của cánh đồng (FieldData mới dùng Vector3 Size)
+local function CalculateRadiusFromSize(sizeVec)
+    -- Lấy kích thước lớn nhất giữa chiều dài và chiều rộng chia đôi
+    -- Ví dụ: Size (100, 1, 100) -> Radius ~ 50
+    if not sizeVec then return 60 end -- Mặc định nếu lỗi
+    return math.max(sizeVec.X, sizeVec.Z) / 2 + 5 -- Cộng thêm 5 studs dư ra cho chắc
 end
 
--- Hàm lấy danh sách quái KHẢ DỤNG (Chỉ trả về quái ở khu vực vào được)
--- Tham số: 
---   1. FieldModule: Module FieldData đã load
---   2. currentBees: Số ong hiện tại của người chơi
+-- Hàm GetActiveMobs: Tự động ghép nối MonsterData + FieldData
+-- Tham số FieldModule: Là cái file FieldData mới của bạn
+-- Tham số currentBees: Số ong hiện tại
 function MonsterData.GetActiveMobs(FieldModule, currentBees)
     local activeList = {}
     
+    -- Kiểm tra xem FieldModule có đúng chuẩn không
+    if not FieldModule or not FieldModule.Fields then 
+        warn("MonsterData: FieldModule không hợp lệ!")
+        return {} 
+    end
+
     for _, mob in ipairs(RawMobList) do
+        -- Lấy data cánh đồng từ FieldModule mới (Dùng key tên cánh đồng)
         local fieldInfo = FieldModule.Fields[mob.Field]
         
-        -- Kiểm tra 1: Cánh đồng có tồn tại trong Data không?
         if fieldInfo then
-            -- Kiểm tra 2: Số ong có đủ để vào khu vực này không?
-            if currentBees >= fieldInfo.ReqBees then
+            -- 1. Check số ong (ReqBees lấy từ FieldData mới)
+            local req = fieldInfo.ReqBees or 0
+            
+            if currentBees >= req then
+                -- 2. Tính toán vị trí & bán kính tự động
+                local center = fieldInfo.Pos + Vector3.new(0, 5, 0) -- Pos là mặt đất, +5 để lơ lửng
+                local radius = CalculateRadiusFromSize(fieldInfo.Size)
+                local time = MobCooldowns[mob.Type] or MobCooldowns["Default"]
                 
-                -- Tự động lấy thông tin từ FieldData đắp vào
+                -- 3. Đóng gói dữ liệu trả về cho Bot Farm
                 table.insert(activeList, {
-                    Name = mob.Name,
-                    Type = mob.Type,
-                    Field = mob.Field,
+                    Name = mob.Name,      -- Tên quái
+                    Type = mob.Type,      -- Loại
+                    Field = mob.Field,    -- Cánh đồng
+                    Time = time,          -- Thời gian hồi
                     
-                    -- [TỰ ĐỘNG] Lấy vị trí từ FieldData
-                    Center = fieldInfo.Pos + Vector3.new(0, 5, 0), -- Cộng Y để không chui xuống đất
-                    
-                    -- [TỰ ĐỘNG] Tính bán kính quét quái dựa trên Size cánh đồng
-                    Radius = CalculateRadius(fieldInfo.Size),
-                    
-                    -- Thời gian hồi sinh
-                    Time = MobCooldowns[mob.Type] or MobCooldowns["Default"],
-                    
-                    -- Đánh dấu Zone để dễ debug nếu cần
-                    ReqBees = fieldInfo.ReqBees 
+                    Center = center,      -- Vị trí đứng farm (Lấy từ Field.Pos)
+                    Radius = radius,      -- Phạm vi loot (Tính từ Field.Size)
+                    ReqBees = req         -- Số ong yêu cầu
                 })
             end
+        else
+            -- warn("Không tìm thấy data cánh đồng: " .. tostring(mob.Field))
         end
     end
     
