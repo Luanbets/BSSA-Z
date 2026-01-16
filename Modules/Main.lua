@@ -1,5 +1,5 @@
 -- ====================================================
--- AUTO BEE SWARM - ZERO TOUCH (MANAGER V6 - FINAL HIVE FIX)
+-- AUTO BEE SWARM - ZERO TOUCH (MANAGER V7 - AUTO KILL ADDED)
 -- Created for: Luận
 -- ====================================================
 local Players = game:GetService("Players")
@@ -11,7 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- 1. CẤU HÌNH REPO
 local REPO_URL = "https://raw.githubusercontent.com/Luanbets/BSSA-Z/main/Modules/"
 
--- 2. HỆ THỐNG LOG & UI (2 DÒNG)
+-- 2. HỆ THỐNG LOG & UI
 local uiName = "BSSA_Manager_UI"
 if CoreGui:FindFirstChild(uiName) then CoreGui[uiName]:Destroy() end
 
@@ -19,7 +19,6 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = uiName
 if pcall(function() screenGui.Parent = CoreGui end) then else screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
--- Khung chứa
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Size = UDim2.new(0.5, 0, 0, 60) 
 mainFrame.Position = UDim2.new(0.25, 0, 0, 0)
@@ -27,29 +26,26 @@ mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 mainFrame.BackgroundTransparency = 0.6
 mainFrame.BorderSizePixel = 0
 
--- Dòng 1: Trạng thái (Status)
 local statusLabel = Instance.new("TextLabel", mainFrame)
 statusLabel.Size = UDim2.new(1, 0, 0.5, 0)
 statusLabel.Position = UDim2.new(0, 0, 0, 0)
 statusLabel.BackgroundTransparency = 1
-statusLabel.TextColor3 = Color3.fromRGB(255, 255, 0) -- Vàng
+statusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
 statusLabel.TextSize = 16
 statusLabel.Font = Enum.Font.GothamBold
 statusLabel.Text = "Status: Idle"
 
--- Dòng 2: Log chi tiết (Quest/Honey)
 local logLabel = Instance.new("TextLabel", mainFrame)
 logLabel.Size = UDim2.new(1, 0, 0.5, 0)
 logLabel.Position = UDim2.new(0, 0, 0.5, 0)
 logLabel.BackgroundTransparency = 1
-logLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- Trắng
+logLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 logLabel.TextSize = 14
 logLabel.Font = Enum.Font.Gotham
 logLabel.Text = "Initializing..."
 
--- Hàm Log thông minh
 local function Log(text, color)
-    if string.find(text, "Farming at") or string.find(text, "Status:") or string.find(text, "Checking Hive") then
+    if string.find(text, "Farming at") or string.find(text, "Status:") or string.find(text, "Fighting") or string.find(text, "Moving to") then
         statusLabel.Text = text:gsub("🚜 ", ""):gsub("📍 ", ""):gsub("🏠 ", "")
     else
         logLabel.Text = text
@@ -112,6 +108,7 @@ task.spawn(function()
     task.wait(1)
     Log("🚀 Starting Main Thread...", Color3.fromRGB(0, 255, 255))
 
+    -- [UPDATE] Load thêm MonsterData
     local Utilities   = LoadModule("Utilities.lua")
     local PlayerUtils = LoadModule("PlayerUtils.lua")
     local ShopUtils   = LoadModule("ShopUtils.lua")
@@ -119,31 +116,31 @@ task.spawn(function()
     local FieldData   = LoadModule("FieldData.lua")
     local AutoFarm    = LoadModule("AutoFarm.lua")
     local PlaceEgg    = LoadModule("PlaceEgg.lua")
+    local MonsterData = LoadModule("MonsterData.lua")
 
-    if not (Utilities and PlayerUtils and ShopUtils and TokenData and FieldData and AutoFarm and PlaceEgg) then
+    if not (Utilities and PlayerUtils and ShopUtils and TokenData and FieldData and AutoFarm and PlaceEgg and MonsterData) then
         Log("❌ CRITICAL: Thiếu Module!", Color3.fromRGB(255, 0, 0))
         return
     end
 
-    local Tools = { Log = Log, Utils = Utilities, Player = PlayerUtils, Shop = ShopUtils, Farm = AutoFarm, Field = FieldData, Token = TokenData, Hatch = PlaceEgg }
+    local Tools = { 
+        Log = Log, Utils = Utilities, Player = PlayerUtils, Shop = ShopUtils, 
+        Farm = AutoFarm, Field = FieldData, Token = TokenData, Hatch = PlaceEgg,
+        Monster = MonsterData -- [NEW] Thêm vào Tools
+    }
+    
     local SaveData = Utilities.LoadData()
     Log("Welcome back, " .. LocalPlayer.Name, Color3.fromRGB(100, 255, 100))
 
-    -- ============================================================
-    -- A. LOGIC BẮT BUỘC: CHECK & CLAIM HIVE
-    -- ============================================================
-    -- [UPDATE] Không check SaveData nữa. Luôn luôn chạy kiểm tra thực tế.
+    -- A. CHECK & CLAIM HIVE
     local ClaimHive = LoadModule("ClaimHive.lua")
     if ClaimHive then
         Log("🏠 Verifying Hive Ownership...", Color3.fromRGB(255, 255, 0))
-        
         local hasHive = false
         while not hasHive do
-            -- Hàm Run sẽ trả về true nếu: 1. Đã có tổ (Owner là mình) HOẶC 2. Nhận tổ thành công.
             if ClaimHive.Run(Log, task.wait, Utilities) then
                 hasHive = true
                 Log("✅ Hive Confirmed!", Color3.fromRGB(0, 255, 0))
-                -- [UPDATE] KHÔNG LƯU 'HiveClaimed' VÀO FILE NỮA
             else
                 Log("⚠️ No Empty Hive! Retrying in 5s...", Color3.fromRGB(255, 100, 100))
                 task.wait(5)
@@ -151,9 +148,7 @@ task.spawn(function()
         end
     end
 
-    -- ============================================================
-    -- B. CÁC MODULE KHÁC (Redeem & Starter vẫn lưu vì làm 1 lần là xong vĩnh viễn)
-    -- ============================================================
+    -- B. REDEEM & STARTER
     if not SaveData.RedeemDone then
         local RedeemCode = LoadModule("RedeemCode.lua")
         if RedeemCode then RedeemCode.Run(Log, task.wait, Utilities) end
@@ -169,13 +164,36 @@ task.spawn(function()
     StartBackgroundCheck(Tools)
 
     -- ============================================================
-    -- C. VÒNG LẶP FARM CHÍNH
+    -- C. VÒNG LẶP FARM CHÍNH + AUTO KILL
     -- ============================================================
     Log("🚜 Main Farm Loop Started", Color3.fromRGB(0, 255, 255))
     local targetMaterial = "Honey"
     local lastField = ""
 
     while true do
+        -- 1. ƯU TIÊN SĂN QUÁI (KILL MONSTERS)
+        local bees = Tools.Player.GetBeeCount()
+        local activeMobs = Tools.Monster.GetActionableMobs(Tools.Field, bees)
+
+        if #activeMobs > 0 then
+            Tools.Log("⚔️ Monster Detected: " .. #activeMobs, Color3.fromRGB(255, 100, 100))
+            Tools.Farm.StopFarm() -- Dừng Farm ngay
+            task.wait(1)
+
+            for _, mob in ipairs(activeMobs) do
+                -- Gọi hàm giết quái tự động (Check -> Giết -> Loot -> Xong)
+                local success = Tools.Monster.KillMob(mob, Tools, Log)
+                if success then
+                    Tools.Log("💀 Eliminated: " .. mob.Name, Color3.fromRGB(255, 50, 50))
+                    task.wait(0.5)
+                end
+            end
+            
+            Tools.Log("✅ Kill Cycle Done. Resume Farming...", Color3.fromRGB(0, 255, 0))
+            lastField = "" -- Reset để log lại dòng Farming at
+        end
+
+        -- 2. AUTO FARM (MẶC ĐỊNH)
         local bestField, fieldInfo = Tools.Field.GetBestFieldForMaterial(targetMaterial)
         if bestField and fieldInfo then
             if lastField ~= bestField then
@@ -186,6 +204,7 @@ task.spawn(function()
         else
             Tools.Log("⚠️ Finding best field...", Color3.fromRGB(255, 100, 100))
         end
-        task.wait(5)
+        
+        task.wait(3) -- Quét lại sau 3 giây
     end
 end)
