@@ -6,6 +6,9 @@ local LocalPlayer = Players.LocalPlayer
 
 local isFarming = false
 
+-- [MỚI] CẤU HÌNH KHOẢNG CÁCH NÉ
+local SAFE_RADIUS = 25 
+
 -- Hàm tìm tổ (Giữ nguyên)
 local function GetMyHivePosition()
     local honeycombs = workspace:FindFirstChild("Honeycombs") or workspace:FindFirstChild("Hives")
@@ -21,7 +24,32 @@ local function GetMyHivePosition()
     return Vector3.new(0, 5, 0)
 end
 
--- Hàm tìm Token (Né những cái đã lướt qua rồi - IgnoreList)
+-- [MỚI] HÀM QUÉT QUÁI VẬT ĐANG TẤN CÔNG
+local function GetNearestThreat(character)
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    
+    local monsters = workspace:FindFirstChild("Monsters")
+    if not monsters then return nil end
+
+    local closestMob = nil
+    local closestDist = SAFE_RADIUS 
+
+    for _, mob in pairs(monsters:GetChildren()) do
+        if mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+            local mobPos = mob.HumanoidRootPart.Position
+            local dist = (mobPos - root.Position).Magnitude
+            
+            if dist < closestDist then
+                closestDist = dist
+                closestMob = mobPos
+            end
+        end
+    end
+    return closestMob
+end
+
+-- Hàm tìm Token (Giữ nguyên)
 local function GetBestToken(FieldInfo, TokenData, Character, IgnoreList)
     local root = Character:FindFirstChild("HumanoidRootPart")
     if not root then return nil end
@@ -33,24 +61,17 @@ local function GetBestToken(FieldInfo, TokenData, Character, IgnoreList)
     local bestPriority = -1 
     local minDistance = 9999
     
-    -- 1. LẤY PHẠM VI HÌNH HỘP
     local halfX = FieldInfo.Size.X / 2
     local halfZ = FieldInfo.Size.Z / 2
     local minX, maxX = FieldInfo.Pos.X - halfX, FieldInfo.Pos.X + halfX
     local minZ, maxZ = FieldInfo.Pos.Z - halfZ, FieldInfo.Pos.Z + halfZ
 
     for _, token in pairs(Collectibles:GetChildren()) do
-        -- Chỉ lấy token chưa bị "Ignore" (chưa lướt qua)
         if token:FindFirstChild("FrontDecal") and token.Transparency < 0.9 and not IgnoreList[token] then
             local pos = token.Position
-            
-            -- Chỉ lấy trong phạm vi Field
             if pos.X >= minX and pos.X <= maxX and pos.Z >= minZ and pos.Z <= maxZ then
-                
                 local textureId = token.FrontDecal.Texture
                 local priority = 0
-                
-                -- Lấy độ ưu tiên
                 if TokenData and TokenData.Tokens and TokenData.Tokens[textureId] then
                     priority = TokenData.Tokens[textureId].Priority
                 end
@@ -70,7 +91,6 @@ local function GetBestToken(FieldInfo, TokenData, Character, IgnoreList)
             end
         end
     end
-
     return bestToken
 end
 
@@ -100,7 +120,12 @@ function module.StartFarm(fieldName, Tools)
     Log("🚜 Farming at " .. fieldName, Color3.fromRGB(0, 255, 255))
     Utils.Tween(CFrame.new(FieldInfo.Pos + Vector3.new(0, 5, 0)))
 
-    -- Danh sách đen (Chứa các token đã đụng vào)
+    -- [MỚI] TÍNH TOÁN GIỚI HẠN CÁNH ĐỒNG (ĐỂ NÉ KHÔNG BỊ CHẠY RA NGOÀI)
+    local halfX = FieldInfo.Size.X / 2 - 2
+    local halfZ = FieldInfo.Size.Z / 2 - 2
+    local minX, maxX = FieldInfo.Pos.X - halfX, FieldInfo.Pos.X + halfX
+    local minZ, maxZ = FieldInfo.Pos.Z - halfZ, FieldInfo.Pos.Z + halfZ
+
     local IgnoreList = {}
 
     task.spawn(function()
@@ -122,7 +147,7 @@ function module.StartFarm(fieldName, Tools)
                 local maxCapacity = LocalPlayer.CoreStats.Capacity.Value   
                 if currentPollen >= (maxCapacity * 0.90) then
                      Log("🎒 Balo đầy. Về tổ...", Color3.fromRGB(255, 170, 0))
-                     IgnoreList = {} -- Reset danh sách khi về tổ
+                     IgnoreList = {} 
                      local hivePos = GetMyHivePosition()
                      Utils.Tween(CFrame.new(hivePos + Vector3.new(0, 5, 0)))
                      task.wait(1) 
@@ -137,36 +162,52 @@ function module.StartFarm(fieldName, Tools)
             end
 
             -- =========================================================
-            -- LOGIC: CHẠY TỚI -> ĐỤNG -> LƯỚT QUA
+            -- [LOGIC MỚI] 1. ƯU TIÊN NÉ QUÁI TRƯỚC
             -- =========================================================
-            local targetToken = GetBestToken(FieldInfo, TokenData, Character, IgnoreList)
-            
-            if targetToken then
-                -- 1. Lao thẳng tới token
-                Character.Humanoid:MoveTo(targetToken.Position)
+            local threatPos = GetNearestThreat(Character)
+
+            if threatPos then
+                -- Nếu có quái: Tính hướng chạy ngược lại
+                local fleeDir = (root.Position - threatPos).Unit
+                local targetPos = root.Position + (fleeDir * 15) -- Chạy ra xa 15 studs
+
+                -- Kẹp tọa độ lại để không chạy ra khỏi cánh đồng
+                local clampedX = math.clamp(targetPos.X, minX, maxX)
+                local clampedZ = math.clamp(targetPos.Z, minZ, maxZ)
                 
-                -- 2. Kiểm tra va chạm (6 studs là rất gần, coi như đã đụng)
-                if root then
-                    local dist = (root.Position - targetToken.Position).Magnitude
-                    
-                    if dist <= 6 then
-                        -- Đã đụng! -> Cho vào danh sách đen ngay lập tức
-                        IgnoreList[targetToken] = true
-                        
-                        -- Không cần lệnh dừng, vòng lặp sau tự động chạy tới cái khác
-                    end
+                Character.Humanoid:MoveTo(Vector3.new(clampedX, root.Position.Y, clampedZ))
+                
+                -- Nhảy để né tốt hơn
+                if Character.Humanoid.FloorMaterial ~= Enum.Material.Air then
+                    Character.Humanoid.Jump = true
                 end
+
             else
-                -- Không có token thì chạy random
-                local rx = math.random(-FieldInfo.Size.X/2 + 5, FieldInfo.Size.X/2 - 5)
-                local rz = math.random(-FieldInfo.Size.Z/2 + 5, FieldInfo.Size.Z/2 - 5)
-                Character.Humanoid:MoveTo(FieldInfo.Pos + Vector3.new(rx, 0, rz))
+                -- =========================================================
+                -- [LOGIC CŨ] 2. NẾU AN TOÀN -> ĐI FARM TOKEN
+                -- =========================================================
+                local targetToken = GetBestToken(FieldInfo, TokenData, Character, IgnoreList)
+                
+                if targetToken then
+                    Character.Humanoid:MoveTo(targetToken.Position)
+                    
+                    if root then
+                        local dist = (root.Position - targetToken.Position).Magnitude
+                        if dist <= 6 then
+                            IgnoreList[targetToken] = true
+                        end
+                    end
+                else
+                    -- Không có token thì chạy random
+                    local rx = math.random(-FieldInfo.Size.X/2 + 5, FieldInfo.Size.X/2 - 5)
+                    local rz = math.random(-FieldInfo.Size.Z/2 + 5, FieldInfo.Size.Z/2 - 5)
+                    Character.Humanoid:MoveTo(FieldInfo.Pos + Vector3.new(rx, 0, rz))
+                end
             end
             
-            -- Xóa bớt danh sách nếu quá đầy để nhẹ máy
             if #IgnoreList > 100 then IgnoreList = {} end
 
-            task.wait(0.1) -- Cập nhật liên tục để chuyển hướng mượt
+            task.wait(0.1) 
         end
     end)
 end
